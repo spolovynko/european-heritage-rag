@@ -3,6 +3,7 @@
 ## Current state
 
 - Last completed phase: Phase 1 — Scope, evidence contract, and success criteria
+- Active phase: Phase 2 — Environment and repository setup
 - Current branch: `main`
 - Dataset size: 0 works; no corpus has been selected or ingested
 - Active index version: None
@@ -47,7 +48,9 @@
 
 ## Known limitations
 
-- No ingestion, search, generation, API, or frontend code exists yet.
+- A root-level Python scaffold exists, but the health API, configuration model,
+  CLI contract, automated checks, and Compose service are not complete.
+- No ingestion, search, generation, or frontend capability exists yet.
 - No corpus, evaluation set, index, model, prompt, or empirical baseline exists.
 - OCR and printed-page/canvas mapping behaviour is specified but untested.
 - The strict page-evidence rule may abstain on facts available only in catalogue
@@ -57,13 +60,13 @@
 
 ## Next phase
 
-- Phase: Phase 2 — Environment and repository setup
+- Phase: [Phase 2 — Environment and repository setup](building_phases/phase-02-environment-and-repository-setup.md)
 - Entry conditions:
   - Phase 1 documentation is accepted.
   - Python 3.12 and `uv` availability can be checked locally.
   - No application capability is assumed from this documentation-only phase.
-- First intended task: Create the smallest reproducible Python backend package,
-  dependency lock, configuration model, and typed liveness/readiness endpoints.
+- First intended task: Finish the root Python dependency configuration, then
+  implement the settings model and typed liveness/readiness endpoints.
 
 ## Next-chat reading order
 
@@ -71,5 +74,5 @@
 2. [Scope and evidence contract](scope-and-evidence-contract.md)
 3. [Architecture](architecture.md)
 4. [ADR-0001](adr/0001-project-scope-and-evidence-contract.md)
-5. [Development and learning guide](adr/learning-guide-agreement.md)
-
+5. [Phase roadmap](building_phases/README.md)
+6. [Development and learning agreement](learning-guide-agreement.md)

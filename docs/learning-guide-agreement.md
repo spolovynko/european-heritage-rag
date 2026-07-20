@@ -285,22 +285,25 @@ flowchart LR
 The structure will grow progressively. Do not create empty modules before their phase requires them.
 
 ```text
-heritage-rag/
-├── backend/
-│   ├── src/heritage_rag/
-│   │   ├── api/
-│   │   ├── domain/
-│   │   ├── generation/
-│   │   ├── pipeline/
-│   │   ├── retrieval/
-│   │   ├── sources/wellcome/
-│   │   ├── config.py
-│   │   └── cli.py
-│   ├── tests/
-│   │   ├── fixtures/
-│   │   ├── integration/
-│   │   └── unit/
-│   └── pyproject.toml
+european-heritage-rag/
+├── src/
+│   └── european_heritage_rag/
+│       ├── api/
+│       ├── core/
+│       │   ├── config.py
+│       │   └── logging.py
+│       ├── domain/
+│       ├── generation/
+│       ├── pipeline/
+│       ├── retrieval/
+│       ├── sources/
+│       │   └── wellcome/
+│       ├── __init__.py
+│       └── cli.py
+├── tests/
+│   ├── fixtures/
+│   ├── integration/
+│   └── unit/
 ├── frontend/
 │   ├── src/
 │   │   ├── api/
@@ -314,16 +317,32 @@ heritage-rag/
 │   └── gold/
 ├── docs/
 │   ├── adr/
+│   ├── building_phases/
 │   ├── evaluation/
 │   ├── architecture.md
-│   └── project-status.md
-├── infra/
-│   └── compose.yaml
+│   ├── learning-guide-agreement.md
+│   ├── project-status.md
+│   └── scope-and-evidence-contract.md
 ├── .env.example
 ├── .gitignore
+├── .python-version
+├── compose.yaml
+├── pyproject.toml
+├── uv.lock
 ├── README.md
 └── LICENSE
 ```
+
+The Python backend lives at the repository root because it is the first
+application and currently owns the primary development workflow. The React
+application will later live in `frontend/`, while shared project documentation,
+data directories, environment configuration, and Docker Compose remain at the
+root.
+
+Python modules are added only when their phase requires them. `core/` is
+reserved for cross-cutting application concerns such as configuration and
+logging; historical-source, retrieval, and generation behaviour must remain in
+their dedicated packages.
 
 `data/` must be excluded from Git except for deliberately small test fixtures.
 

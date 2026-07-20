@@ -12,9 +12,11 @@ project whose behaviour can be explained, tested, and defended.
 
 ## Current stage
 
-Phase 1 defines the product boundary, evidence contract, and evaluation goals.
-There is no application or ingested dataset yet. Metrics below are targets for
-later evaluation, not achieved results.
+Phase 1 defined the product boundary, evidence contract, and evaluation goals.
+Phase 2 is in progress: the root-level Python project and package structure
+exist, but the backend health API and its automated checks are not complete.
+No dataset has been ingested. Metrics below are targets for later evaluation,
+not achieved results.
 
 ## Intended users
 
@@ -110,6 +112,7 @@ not a substitute for reading the original source or consulting a historian.
 - [Scope and evidence contract](docs/scope-and-evidence-contract.md)
 - [Architecture](docs/architecture.md)
 - [Project status and next-phase handoff](docs/project-status.md)
+- [Building phases roadmap](docs/building_phases/README.md)
 - [ADR index](docs/adr/README.md)
 - [ADR-0001: Project scope and evidence contract](docs/adr/0001-project-scope-and-evidence-contract.md)
-- [Development and learning guide](docs/adr/learning-guide-agreement.md)
+- [Development and learning agreement](docs/learning-guide-agreement.md)

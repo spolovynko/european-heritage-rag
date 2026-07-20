@@ -17,12 +17,12 @@ new number and mark the earlier record superseded.
 - [Scope and evidence contract](../scope-and-evidence-contract.md)
 - [Architecture](../architecture.md)
 - [Project status](../project-status.md)
-- [Development and learning guide](learning-guide-agreement.md)
+- [Development and learning agreement](../learning-guide-agreement.md)
+- [Building phases roadmap](../building_phases/README.md)
 
 ## Naming and status
 
 Files use `NNNN-short-decision-title.md` with sequential numbers. Valid statuses
 are Proposed, Accepted, Superseded, and Deprecated. Every phase produces at
 least one ADR for a meaningful decision using the template in the development
-and learning guide.
-
+and learning agreement.

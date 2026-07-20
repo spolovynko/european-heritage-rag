@@ -1,7 +1,7 @@
 [project]
 name = "european-heritage-rag"
 version = "0.1.0"
-description = "Add your description here"
+description = "Evidence-first exploration of public-domain European heritage books"
 readme = "README.md"
 authors = [
     { name = "Serhiy", email = "spolovynko@gmail.com" }
@@ -9,11 +9,8 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.139.2",
-    "httpx>=0.28.1",
-    "mypy>=2.3.0",
     "pydantic>=2.13.4",
-    "pytest>=9.1.1",
-    "ruff>=0.15.22",
+    "pydantic-settings>=2.14.2",
     "structlog>=26.1.0",
     "typer>=0.27.0",
     "uvicorn>=0.51.0",
@@ -25,3 +22,34 @@ european-heritage-rag = "european_heritage_rag:main"
 [build-system]
 requires = ["uv_build>=0.11.6,<0.12.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mypy>=2.3.0",
+    "pytest>=9.1.1",
+    "ruff>=0.15.22",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["-ra"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "B",
+    "E",
+    "F",
+    "I",
+    "UP",
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src"]

@@ -84,3 +84,51 @@ def test_production_logging_uses_json_output(
     assert event["logger"] == __name__
     assert event["level"] == "info"
     assert "timestamp" in event
+
+
+def test_logging_filters_events_below_configured_level(
+    capsys: pytest.CaptureFixture[str],
+    restore_logging_state: None,
+) -> None:
+    """Events below the configured level should not be emitted."""
+
+    settings = AppSettings(
+        _env_file=None,
+        app_env=AppEnvironment.LOCAL,
+        log_level=LogLevel.INFO,
+    )
+    configure_logging(settings)
+
+    logger = get_logger(__name__)
+    logger.debug("debug_event")
+    logger.info("info_event")
+
+    output = capsys.readouterr().out
+
+    assert "debug_event" not in output
+    assert "info_event" in output
+
+
+def test_standard_library_logs_use_configured_renderer(
+    capsys: pytest.CaptureFixture[str],
+    restore_logging_state: None,
+) -> None:
+    """Third-party standard-library logs should use the production format."""
+
+    settings = AppSettings(
+        _env_file=None,
+        app_env=AppEnvironment.PRODUCTION,
+        log_level=LogLevel.INFO,
+    )
+    configure_logging(settings)
+
+    standard_logger = logging.getLogger("third_party")
+    standard_logger.info("library_ready")
+
+    output = capsys.readouterr().out
+    event = json.loads(output)
+
+    assert event["event"] == "library_ready"
+    assert event["logger"] == "third_party"
+    assert event["level"] == "info"
+    assert "timestamp" in event

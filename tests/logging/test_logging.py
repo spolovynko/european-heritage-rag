@@ -1,5 +1,6 @@
 """Tests for structured logging configuration."""
 
+import json
 import logging
 from collections.abc import Iterator
 
@@ -56,3 +57,30 @@ def test_local_logging_uses_readable_structured_output(
     assert "component=phase_2" in output
     assert __name__ in output
     assert "info" in output
+
+
+def test_production_logging_uses_json_output(
+    capsys: pytest.CaptureFixture[str],
+    restore_logging_state: None,
+) -> None:
+    """Production logs should be machine-readable JSON."""
+
+    settings = AppSettings(
+        _env_file=None,
+        app_env=AppEnvironment.PRODUCTION,
+        log_level=LogLevel.INFO,
+    )
+    configure_logging(settings)
+
+    logger = get_logger(__name__, component="api")
+    logger.info("application_started", version="0.1.0")
+
+    output = capsys.readouterr().out
+    event = json.loads(output)
+
+    assert event["event"] == "application_started"
+    assert event["component"] == "api"
+    assert event["version"] == "0.1.0"
+    assert event["logger"] == __name__
+    assert event["level"] == "info"
+    assert "timestamp" in event

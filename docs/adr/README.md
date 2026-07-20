@@ -1,0 +1,28 @@
+# Architecture Decision Records
+
+Architecture Decision Records (ADRs) capture durable project decisions, their
+alternatives, consequences, validation, and conditions for reconsideration.
+They are not task logs. Accepted records are changed only to correct errors or
+clarify wording; a later decision that replaces one should normally receive a
+new number and mark the earlier record superseded.
+
+## Index
+
+| ADR | Status | Date | Decision |
+|---|---|---|---|
+| [ADR-0001: Project scope and evidence contract](0001-project-scope-and-evidence-contract.md) | Accepted | 2026-07-20 | Begin with English public-domain Wellcome books, require current-turn page evidence, and use deterministic two-step RAG as the evaluated baseline. |
+
+## Supporting documents
+
+- [Scope and evidence contract](../scope-and-evidence-contract.md)
+- [Architecture](../architecture.md)
+- [Project status](../project-status.md)
+- [Development and learning guide](learning-guide-agreement.md)
+
+## Naming and status
+
+Files use `NNNN-short-decision-title.md` with sequential numbers. Valid statuses
+are Proposed, Accepted, Superseded, and Deprecated. Every phase produces at
+least one ADR for a meaningful decision using the template in the development
+and learning guide.
+

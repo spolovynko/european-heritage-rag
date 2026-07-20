@@ -64,6 +64,8 @@ def test_settings_provider_reuses_single_instance(
         assert first.app_env is AppEnvironment.TEST
     finally:
         get_settings.cache_clear()
+
+
 def test_settings_cannot_be_modified_after_creation() -> None:
     """Validated runtime settings should be immutable."""
 

@@ -2,12 +2,12 @@
 
 ## Current state
 
-- Last completed phase: Phase 1 — Scope, evidence contract, and success criteria
-- Active phase: Phase 2 — Environment and repository setup
+- Last completed phase: Phase 2 — Environment and repository setup
+- Active phase: Phase 3 — UI foundation and progress dashboard
 - Current branch: `main`
 - Dataset size: 0 works; no corpus has been selected or ingested
 - Active index version: None
-- Last successful command: PowerShell Phase 1 documentation contract check
+- Last successful command: `pnpm build` for the Phase 3 frontend prototype
 
 ## Completed capabilities
 
@@ -26,19 +26,30 @@
 - Documented the deterministic two-step RAG boundary and low-fidelity chat,
   source-panel, and pipeline-dashboard sketch.
 - Accepted ADR-0001 and indexed it.
+- Established the Python 3.12 and `uv` development environment.
+- Added typed settings, structured logging, liveness and readiness endpoints,
+  a version CLI, automated checks, and a one-service container baseline.
+- Added a responsive frontend prototype with chat, ingestion, data, retrieval,
+  and evaluation workspaces backed by explicit demo data.
+- Connected the frontend status indicator to `/health/ready` through a stable
+  same-origin API path.
+- Accepted ADR-0002 and added the Phase 2 implementation guide.
 
 ## Verification results
 
-- Tests: Not applicable; Phase 1 contains documentation and no application code.
-- Linting: `git diff --check` passes for tracked edits; Markdown structure and
-  repository-local links were checked with PowerShell.
-- Manual checks: 10 example questions, 2 explicitly unanswerable examples, and
-  an expected evidence entry for all 10.
+- Tests: 14 backend tests pass.
+- Linting: Ruff and strict mypy pass for the Phase 2 backend; `git diff --check`
+  passes for the current changes.
+- Frontend: the Vite production build passes; desktop and mobile interactions
+  were checked during the prototype build.
+- Manual checks: health API, CLI, Docker Compose, responsive navigation, data
+  explorer states, and the chat placeholder have been exercised.
 - Metrics: Not measured. Every numeric value is labelled as an initial target.
 
 ## Important decisions
 
 - [ADR-0001: Project scope and evidence contract](adr/0001-project-scope-and-evidence-contract.md)
+- [ADR-0002: Python, dependency management, and repository structure](adr/0002-python-dependency-management-and-repository-structure.md)
 - The initial answer contract requires page-bearing evidence even for
   bibliographic claims; metadata-only citations are a documented revisit point.
 - English is an evaluated baseline. French and Dutch require their own reviewed
@@ -48,9 +59,10 @@
 
 ## Known limitations
 
-- A root-level Python scaffold exists, but the health API, configuration model,
-  CLI contract, automated checks, and Compose service are not complete.
-- No ingestion, search, generation, or frontend capability exists yet.
+- The frontend is not yet served by FastAPI; Vite remains the development and
+  build boundary until the next integration step.
+- The hosted UI is a frontend-only prototype and cannot reach the local API.
+- No ingestion, search, retrieval, or answer-generation capability exists yet.
 - No corpus, evaluation set, index, model, prompt, or empirical baseline exists.
 - OCR and printed-page/canvas mapping behaviour is specified but untested.
 - The strict page-evidence rule may abstain on facts available only in catalogue
@@ -60,19 +72,19 @@
 
 ## Next phase
 
-- Phase: [Phase 2 — Environment and repository setup](building_phases/phase-02-environment-and-repository-setup.md)
+- Phase: [Phase 3 — UI foundation and progress dashboard](building_phases/phase-03-ui-foundation-and-progress-dashboard.md)
 - Entry conditions:
-  - Phase 1 documentation is accepted.
-  - Python 3.12 and `uv` availability can be checked locally.
-  - No application capability is assumed from this documentation-only phase.
-- First intended task: Finish the root Python dependency configuration, then
-  implement the settings model and typed liveness/readiness endpoints.
+  - Phase 2 implementation and ADR are accepted.
+  - The backend health endpoints and frontend production build pass.
+  - The frontend uses `/health/ready` as its same-origin API contract.
+- First intended task: Mount the built frontend in FastAPI while preserving the
+  existing health routes and testability when frontend assets are absent.
 
 ## Next-chat reading order
 
 1. [README](../README.md)
 2. [Scope and evidence contract](scope-and-evidence-contract.md)
 3. [Architecture](architecture.md)
-4. [ADR-0001](adr/0001-project-scope-and-evidence-contract.md)
+4. [ADR-0002](adr/0002-python-dependency-management-and-repository-structure.md)
 5. [Phase roadmap](building_phases/README.md)
 6. [Development and learning agreement](learning-guide-agreement.md)

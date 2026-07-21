@@ -11,6 +11,7 @@ new number and mark the earlier record superseded.
 | ADR | Status | Date | Decision |
 |---|---|---|---|
 | [ADR-0001: Project scope and evidence contract](0001-project-scope-and-evidence-contract.md) | Accepted | 2026-07-20 | Begin with English public-domain Wellcome books, require current-turn page evidence, and use deterministic two-step RAG as the evaluated baseline. |
+| [ADR-0002: Python, dependency management, and repository structure](0002-python-dependency-management-and-repository-structure.md) | Accepted | 2026-07-21 | Use Python 3.12, `uv`, a root `src` layout, progressive dependencies, and a minimal one-service container baseline. |
 
 ## Supporting documents
 
@@ -19,6 +20,7 @@ new number and mark the earlier record superseded.
 - [Project status](../project-status.md)
 - [Development and learning agreement](../learning-guide-agreement.md)
 - [Building phases roadmap](../building_phases/README.md)
+- [Building guides](../building_guides/README.md)
 
 ## Naming and status
 

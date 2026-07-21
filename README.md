@@ -10,15 +10,15 @@ The project has two goals: learn the engineering trade-offs of a real
 retrieval-augmented generation (RAG) system and produce a small portfolio
 project whose behaviour can be explained, tested, and defended.
 
-## Current stage
+## Project status
 
 Phase 1 defined the product boundary, evidence contract, and evaluation goals.
-Phase 2 is in progress: the root-level Python project and package structure
-exist, but the backend health API and its automated checks are not complete.
-No dataset has been ingested. Metrics below are targets for later evaluation,
-not achieved results.
+Phase 2 established the reproducible Python environment, typed configuration,
+structured logging, health API, CLI, automated checks, and container baseline.
+Phase 3 is building the frontend shell and preparing to serve it from FastAPI.
+No dataset has been ingested, and the application is not ready for end-user use.
 
-## Intended users
+## Who it is for
 
 - **Historical researcher:** locates relevant passages and verifies them
   against digitised pages.
@@ -63,23 +63,13 @@ behaviour for that language; translating the interface alone does not qualify.
 The complete definitions, edge cases, and abstention rules are in
 [Scope and evidence contract](docs/scope-and-evidence-contract.md).
 
-## Initial evaluation goals
+## Trust and evaluation
 
-These are release goals to tune against a versioned English evaluation set;
-they are not Phase 1 measurements.
-
-| Concern | Initial goal | Measurement boundary |
-|---|---:|---|
-| Retrieval Recall@10 | >= 0.85 | English, answerable cases with manually labelled relevant pages |
-| Citation coverage | 100% | Substantial claims in answerable responses have at least one citation |
-| Citation validity | 100% | Every citation names a retrieved chunk's work and page range |
-| Abstention | >= 90% accuracy | At least 20 cases, including at least 5 deliberately unanswerable cases |
-| Unsafe/out-of-scope abstention | 100% | Medical-advice and outside-corpus test cases |
-| Search latency | p95 <= 1.5 s | Warm local search through reranking, top 10, portfolio corpus; generation excluded |
-
-Hardware, corpus version, index version, query set, and the latency window must
-be recorded with every result. A missed retrieval and an unsupported generated
-claim are different failures and will be reported separately.
+The project will evaluate retrieval quality, citation coverage and validity,
+abstention behaviour, and search latency against a versioned English evaluation
+set. These are future release targets, not achieved results. The measurement
+rules and target values are defined in the
+[scope and evidence contract](docs/scope-and-evidence-contract.md).
 
 ## Example questions
 
@@ -99,7 +89,7 @@ when the first corpus and evaluation set are selected.
 | 9 | Based on these books, what medicine should I take today? | Current medical advice | **Deliberately unanswerable** | Abstention; historical passages are not evidence for current clinical advice |
 | 10 | What did the author privately think about an event never mentioned in the indexed works? | Absent/private information | **Deliberately unanswerable** | Abstention after retrieval finds no direct page-level support |
 
-## Deliberate exclusions
+## Limitations
 
 The initial product does not provide current medical advice, general web
 search, claims about material outside the indexed corpus, image interpretation,
@@ -107,7 +97,7 @@ handwriting recognition, user document upload, non-public-domain content,
 autonomous research, or exhaustive coverage of the Wellcome catalogue. It is
 not a substitute for reading the original source or consulting a historian.
 
-## Documentation map
+## Documentation
 
 - [Scope and evidence contract](docs/scope-and-evidence-contract.md)
 - [Architecture](docs/architecture.md)
@@ -115,4 +105,6 @@ not a substitute for reading the original source or consulting a historian.
 - [Building phases roadmap](docs/building_phases/README.md)
 - [ADR index](docs/adr/README.md)
 - [ADR-0001: Project scope and evidence contract](docs/adr/0001-project-scope-and-evidence-contract.md)
+- [ADR-0002: Python, dependency management, and repository structure](docs/adr/0002-python-dependency-management-and-repository-structure.md)
+- [Building guides](docs/building_guides/README.md)
 - [Development and learning agreement](docs/learning-guide-agreement.md)

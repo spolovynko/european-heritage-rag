@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="HeritageRAG evidence-first archive explorer and pipeline dashboard"
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="HeritageRAG — Evidence-first archive intelligence" />
+    <meta property="og:description" content="Explore historical sources through inspectable evidence, page provenance, and transparent data pipelines." />
+    <meta property="og:image" content="https://heritagerag-workspace.spolovynko.chatgpt.site/og.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="HeritageRAG — Evidence-first archive intelligence" />
+    <meta name="twitter:description" content="A chromatic evidence-first workspace for European heritage research." />
+    <meta name="twitter:image" content="https://heritagerag-workspace.spolovynko.chatgpt.site/og.png" />
+    <title>HeritageRAG — Archive workspace</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+
+    <div class="app-shell">
+      <div class="sidebar-scrim" data-sidebar-close></div>
+
+      <aside class="sidebar" aria-label="Primary navigation">
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true">H</div>
+          <div>
+            <p class="brand-name">HeritageRAG</p>
+            <p class="brand-tagline">Heritage intelligence</p>
+          </div>
+          <button class="icon-button sidebar-close" type="button" aria-label="Close menu" data-sidebar-close>
+            <span aria-hidden="true">×</span>
+          </button>
+        </div>
+
+        <nav class="nav-groups">
+          <div class="nav-group">
+            <p class="nav-label">Explore</p>
+            <button class="nav-item" type="button" data-view="chat">
+              <span class="nav-icon" aria-hidden="true">✦</span>
+              <span>Chat</span>
+            </button>
+            <button class="nav-item is-active" type="button" data-view="dashboard" aria-current="page">
+              <span class="nav-icon" aria-hidden="true">▦</span>
+              <span>Ingestion</span>
+              <span class="nav-count">2</span>
+            </button>
+            <button class="nav-item" type="button" data-view="data">
+              <span class="nav-icon" aria-hidden="true">▤</span>
+              <span>Data</span>
+            </button>
+          </div>
+
+          <div class="nav-group">
+            <p class="nav-label">Inspect</p>
+            <button class="nav-item" type="button" data-view="retrieval">
+              <span class="nav-icon" aria-hidden="true">⌕</span>
+              <span>Retrieval</span>
+            </button>
+            <button class="nav-item" type="button" data-view="evaluation">
+              <span class="nav-icon" aria-hidden="true">◇</span>
+              <span>Evaluation</span>
+            </button>
+          </div>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="corpus-summary">
+            <span class="corpus-icon" aria-hidden="true">24</span>
+            <div>
+              <p>Development corpus</p>
+              <span>Sample works</span>
+            </div>
+          </div>
+          <div class="phase-row">
+            <span class="status-dot status-dot--amber" aria-hidden="true"></span>
+            <span>Phase 3 prototype</span>
+          </div>
+        </div>
+      </aside>
+
+      <div class="workspace">
+        <header class="topbar">
+          <div class="topbar-context">
+            <button class="icon-button menu-button" type="button" aria-label="Open menu" aria-expanded="false" data-sidebar-open>
+              <span aria-hidden="true">☰</span>
+            </button>
+            <div>
+              <p class="topbar-eyebrow">Knowledge system</p>
+              <p class="topbar-title" data-current-view>Ingestion</p>
+            </div>
+          </div>
+
+          <div class="topbar-actions">
+            <span class="demo-badge">Demo data</span>
+            <button class="system-status is-checking" type="button" data-health-refresh aria-live="polite">
+              <span class="system-status-dot" aria-hidden="true"></span>
+              <span data-health-label>Checking system</span>
+              <span class="refresh-mark" aria-hidden="true">↻</span>
+            </button>
+          </div>
+        </header>
+
+        <main id="main-content" class="main-content" tabindex="-1">
+          <section class="view" data-view-panel="dashboard" aria-labelledby="dashboard-title">
+            <div class="page-heading heading-with-actions">
+              <div>
+                <p class="kicker">Pipeline operations</p>
+                <h1 id="dashboard-title">Ingestion overview</h1>
+                <p>Follow each work from catalogue discovery to validated OCR pages.</p>
+              </div>
+              <button class="secondary-button" type="button" data-notice="A new run will be available when ingestion is connected.">
+                <span aria-hidden="true">＋</span> New run
+              </button>
+            </div>
+
+            <div class="notice-banner" role="note">
+              <span class="notice-icon" aria-hidden="true">i</span>
+              <p><strong>Prototype workspace.</strong> Pipeline figures are typed sample data; system health is requested from the live API.</p>
+              <button type="button" aria-label="Dismiss notice" data-dismiss-notice>×</button>
+            </div>
+
+            <div class="metric-grid" aria-label="Ingestion summary">
+              <article class="metric-card">
+                <div class="metric-topline"><span>Works</span><span class="metric-symbol">▱</span></div>
+                <strong>24</strong>
+                <p><span class="positive-text">+6</span> since previous run</p>
+              </article>
+              <article class="metric-card">
+                <div class="metric-topline"><span>OCR pages</span><span class="metric-symbol">≡</span></div>
+                <strong>4,816</strong>
+                <p>3,276 processed</p>
+              </article>
+              <article class="metric-card metric-card--warning">
+                <div class="metric-topline"><span>Needs attention</span><span class="metric-symbol">!</span></div>
+                <strong>2</strong>
+                <p>1 missing OCR · 1 metadata</p>
+              </article>
+              <article class="metric-card">
+                <div class="metric-topline"><span>Last successful run</span><span class="metric-symbol">◷</span></div>
+                <strong class="metric-time">8 min</strong>
+                <p>Completed at 10:42</p>
+              </article>
+            </div>
+
+            <div class="dashboard-grid">
+              <article class="panel pipeline-panel">
+                <div class="panel-header">
+                  <div>
+                    <div class="title-with-badge">
+                      <h2>Current ingestion</h2>
+                      <span class="state-badge state-badge--active"><span></span>In progress</span>
+                    </div>
+                    <p>wellcome-smoke-test-03</p>
+                  </div>
+                  <button class="text-button" type="button" data-notice="Detailed run logs will arrive with the ingestion pipeline.">View run details</button>
+                </div>
+
+                <div class="progress-summary">
+                  <div>
+                    <span>Overall progress</span>
+                    <strong>68%</strong>
+                  </div>
+                  <div class="progress-track" role="progressbar" aria-valuenow="68" aria-valuemin="0" aria-valuemax="100" aria-label="Overall ingestion progress">
+                    <span style="width: 68%"></span>
+                  </div>
+                  <p>3,276 of 4,816 pages processed</p>
+                </div>
+
+                <ol class="stage-list">
+                  <li class="stage-item is-complete">
+                    <span class="stage-marker" aria-hidden="true">✓</span>
+                    <div><strong>Catalogue discovery</strong><span>24 works selected</span></div>
+                    <span class="stage-value">24 / 24</span>
+                  </li>
+                  <li class="stage-item is-complete">
+                    <span class="stage-marker" aria-hidden="true">✓</span>
+                    <div><strong>Metadata capture</strong><span>Licences and source links preserved</span></div>
+                    <span class="stage-value">24 / 24</span>
+                  </li>
+                  <li class="stage-item is-active">
+                    <span class="stage-marker" aria-hidden="true"></span>
+                    <div><strong>OCR extraction</strong><span>Processing page text and canvas order</span></div>
+                    <span class="stage-value">3,276 / 4,816</span>
+                  </li>
+                  <li class="stage-item">
+                    <span class="stage-marker" aria-hidden="true">4</span>
+                    <div><strong>Validation</strong><span>Waiting for OCR extraction</span></div>
+                    <span class="stage-value">Queued</span>
+                  </li>
+                </ol>
+              </article>
+
+              <article class="panel activity-panel">
+                <div class="panel-header compact-header">
+                  <div><h2>Recent activity</h2><p>Live run events</p></div>
+                  <span class="live-label"><span></span>Live</span>
+                </div>
+                <ol class="activity-list">
+                  <li>
+                    <span class="activity-mark activity-mark--working" aria-hidden="true"></span>
+                    <div><strong>Extracting OCR pages</strong><p>On the preservation of public health</p><time>Just now</time></div>
+                  </li>
+                  <li>
+                    <span class="activity-mark activity-mark--success" aria-hidden="true">✓</span>
+                    <div><strong>Metadata validated</strong><p>Reports on cholera in London</p><time>2 min ago</time></div>
+                  </li>
+                  <li>
+                    <span class="activity-mark activity-mark--warning" aria-hidden="true">!</span>
+                    <div><strong>OCR unavailable</strong><p>Medical observations, volume II</p><time>4 min ago</time></div>
+                  </li>
+                  <li>
+                    <span class="activity-mark activity-mark--success" aria-hidden="true">✓</span>
+                    <div><strong>IIIF manifest stored</strong><p>Notes on sanitary reform</p><time>6 min ago</time></div>
+                  </li>
+                </ol>
+                <button class="activity-footer" type="button" data-notice="The full event stream will arrive with ingestion.">View all activity <span aria-hidden="true">→</span></button>
+              </article>
+
+              <article class="panel attention-panel">
+                <div class="attention-icon" aria-hidden="true">!</div>
+                <div>
+                  <p class="kicker">Attention required</p>
+                  <h2>Two records need review</h2>
+                  <p>One work has no OCR resource and another is missing a confirmed public-domain licence.</p>
+                </div>
+                <button class="secondary-button" type="button" data-notice="Review filters will be enabled when real records are ingested.">Review records</button>
+              </article>
+            </div>
+          </section>
+
+          <section class="view" data-view-panel="chat" aria-labelledby="chat-title" hidden>
+            <div class="page-heading">
+              <p class="kicker">Evidence-first research</p>
+              <h1 id="chat-title">Ask the archive</h1>
+              <p>Explore historical sources with answers grounded in work- and page-level evidence.</p>
+            </div>
+
+            <div class="chat-shell panel">
+              <div class="chat-empty-state">
+                <div class="archive-emblem" aria-hidden="true"><span>H</span></div>
+                <span class="state-badge state-badge--planned">Preview</span>
+                <h2>What would you like to investigate?</h2>
+                <p>Try a focused historical question. Chat will become active after the first searchable corpus is indexed.</p>
+                <div class="suggestion-grid" aria-label="Example questions">
+                  <button type="button" data-prompt="What measures did these works recommend for preventing cholera?">What measures were recommended for preventing cholera?<span>→</span></button>
+                  <button type="button" data-prompt="Compare how two indexed works discuss sanitation.">Compare how two works discuss sanitation.<span>→</span></button>
+                  <button type="button" data-prompt="Summarise the argument on pages 20–25 of this work.">Summarise a specific page range.<span>→</span></button>
+                </div>
+              </div>
+              <form class="chat-composer" data-chat-form>
+                <label class="sr-only" for="chat-input">Ask a question about the archive</label>
+                <textarea id="chat-input" rows="1" placeholder="Ask a question about the indexed works…" data-chat-input></textarea>
+                <button type="submit" aria-label="Send question">↑</button>
+                <p>Answers will cite the work and exact page range.</p>
+              </form>
+              <p class="inline-feedback" data-chat-feedback role="status" hidden></p>
+            </div>
+          </section>
+
+          <section class="view" data-view-panel="data" aria-labelledby="data-title" hidden>
+            <div class="page-heading heading-with-actions">
+              <div>
+                <p class="kicker">Intermediate records</p>
+                <h1 id="data-title">Data explorer</h1>
+                <p>Inspect sample metadata, provenance, and page-level OCR before indexing.</p>
+              </div>
+              <span class="state-badge state-badge--sample">Sample records</span>
+            </div>
+
+            <div class="explorer-layout">
+              <aside class="panel record-browser" aria-label="Sample works">
+                <div class="explorer-controls">
+                  <label class="search-field">
+                    <span aria-hidden="true">⌕</span>
+                    <span class="sr-only">Search sample works</span>
+                    <input type="search" placeholder="Search sample works" data-record-search />
+                  </label>
+                  <select aria-label="Filter by status" data-record-filter>
+                    <option value="all">All records</option>
+                    <option value="ready">Ready</option>
+                    <option value="review">Needs review</option>
+                  </select>
+                </div>
+                <div class="record-count"><span data-record-count>4 works</span><span>Updated 8 min ago</span></div>
+                <div class="record-list" data-record-list></div>
+                <div class="record-empty" data-record-empty hidden>
+                  <span aria-hidden="true">⌕</span>
+                  <strong>No matching works</strong>
+                  <p>Try another title or reset the filter.</p>
+                  <button class="text-button" type="button" data-reset-search>Reset search</button>
+                </div>
+              </aside>
+
+              <article class="panel record-detail" data-record-detail>
+                <div class="detail-loading" data-detail-loading aria-label="Loading record">
+                  <span></span><span></span><span></span>
+                </div>
+                <div data-detail-content>
+                  <div class="detail-heading">
+                    <div>
+                      <p class="kicker">Selected work</p>
+                      <h2 data-detail-title></h2>
+                      <p data-detail-contributor></p>
+                    </div>
+                    <span class="state-badge" data-detail-status></span>
+                  </div>
+
+                  <dl class="metadata-grid">
+                    <div><dt>Work ID</dt><dd data-detail-id></dd></div>
+                    <div><dt>Published</dt><dd data-detail-year></dd></div>
+                    <div><dt>Language</dt><dd data-detail-language></dd></div>
+                    <div><dt>Rights</dt><dd data-detail-rights></dd></div>
+                    <div><dt>Pages</dt><dd data-detail-pages></dd></div>
+                    <div><dt>Source</dt><dd data-detail-source></dd></div>
+                  </dl>
+
+                  <div class="ocr-panel">
+                    <div class="ocr-toolbar">
+                      <div>
+                        <p class="kicker">OCR preview</p>
+                        <h3>Page <span data-detail-page></span></h3>
+                      </div>
+                      <div class="page-controls">
+                        <button type="button" aria-label="Previous OCR page" data-page-prev>←</button>
+                        <span><span data-page-current></span> / <span data-page-total></span></span>
+                        <button type="button" aria-label="Next OCR page" data-page-next>→</button>
+                      </div>
+                    </div>
+                    <blockquote data-detail-ocr></blockquote>
+                    <div class="provenance-row">
+                      <span><i></i> Page provenance preserved</span>
+                      <button class="text-button" type="button" data-copy-id>Copy work ID</button>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section class="view" data-view-panel="retrieval" aria-labelledby="retrieval-title" hidden>
+            <div class="page-heading">
+              <p class="kicker">Planned diagnostic</p>
+              <h1 id="retrieval-title">Retrieval inspector</h1>
+              <p>This workspace will expose how candidate passages are found, fused, and reranked.</p>
+            </div>
+            <div class="future-grid">
+              <article class="panel future-card">
+                <span class="future-number">01</span><h2>Dense search</h2><p>Inspect multilingual semantic matches and similarity scores.</p><span class="future-phase">Phase 8</span>
+              </article>
+              <article class="panel future-card">
+                <span class="future-number">02</span><h2>Sparse search</h2><p>See exact-term BM25 matches alongside semantic candidates.</p><span class="future-phase">Phase 9</span>
+              </article>
+              <article class="panel future-card">
+                <span class="future-number">03</span><h2>Fusion & reranking</h2><p>Trace reciprocal rank fusion and final evidence selection.</p><span class="future-phase">Phase 9</span>
+              </article>
+            </div>
+            <div class="panel empty-diagnostic">
+              <div class="empty-diagnostic-mark" aria-hidden="true">⌕</div>
+              <div><h2>No searchable index yet</h2><p>Retrieval diagnostics activate after Gold chunks and embeddings are built.</p></div>
+              <span class="state-badge state-badge--planned">Coming later</span>
+            </div>
+          </section>
+
+          <section class="view" data-view-panel="evaluation" aria-labelledby="evaluation-title" hidden>
+            <div class="page-heading heading-with-actions">
+              <div>
+                <p class="kicker">Quality contract</p>
+                <h1 id="evaluation-title">Evaluation</h1>
+                <p>Targets are visible early, but remain explicitly unmeasured until a versioned corpus exists.</p>
+              </div>
+              <span class="state-badge state-badge--planned">Not measured</span>
+            </div>
+            <div class="evaluation-grid">
+              <article class="panel evaluation-card"><span>Retrieval</span><strong>Recall@10</strong><p>Target to be calibrated</p><div class="unmeasured-bar"></div></article>
+              <article class="panel evaluation-card"><span>Citations</span><strong>Coverage & validity</strong><p>Target to be calibrated</p><div class="unmeasured-bar"></div></article>
+              <article class="panel evaluation-card"><span>Safety</span><strong>Abstention</strong><p>Target to be calibrated</p><div class="unmeasured-bar"></div></article>
+            </div>
+            <article class="panel evaluation-note">
+              <span class="notice-icon" aria-hidden="true">i</span>
+              <div><h2>Targets are hypotheses, not claims</h2><p>Scores will appear only after the evaluation set, index version, and measurement rules are reproducible.</p></div>
+            </article>
+          </section>
+        </main>
+
+        <div class="toast" role="status" aria-live="polite" data-toast hidden></div>
+      </div>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

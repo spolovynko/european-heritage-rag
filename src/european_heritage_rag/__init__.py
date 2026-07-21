@@ -1,2 +1,1 @@
-def main() -> None:
-    print("Hello from european-heritage-rag!")
+"""HeritageRAG application package."""

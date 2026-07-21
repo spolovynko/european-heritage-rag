@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-european-heritage-rag = "european_heritage_rag:main"
+european-heritage-rag = "european_heritage_rag.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.11.6,<0.12.0"]
@@ -53,3 +53,4 @@ select = [
 python_version = "3.12"
 strict = true
 files = ["src"]
+

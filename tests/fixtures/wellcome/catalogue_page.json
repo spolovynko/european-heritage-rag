@@ -1,0 +1,47 @@
+{
+  "type": "ResultList",
+  "pageSize": 1,
+  "totalPages": 1,
+  "totalResults": 1,
+  "results": [
+    {
+      "id": "xpxuaxuf",
+      "title": "Cholera : practical observations on a successful method of treating cholera / by Charles Patterson.",
+      "workType": {
+        "id": "a",
+        "label": "Books"
+      },
+      "availabilities": [
+        {
+          "id": "online",
+          "label": "Online"
+        }
+      ],
+      "languages": [
+        {
+          "id": "eng",
+          "label": "English"
+        }
+      ],
+      "items": [
+        {
+          "locations": [
+            {
+              "locationType": {
+                "id": "iiif-presentation",
+                "label": "IIIF Presentation"
+              },
+              "url": "https://iiif.wellcomecollection.org/presentation/v2/b28041136",
+              "license": {
+                "id": "pdm",
+                "label": "Public Domain Mark",
+                "url": "https://creativecommons.org/publicdomain/mark/1.0/"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "nextPage": null
+}

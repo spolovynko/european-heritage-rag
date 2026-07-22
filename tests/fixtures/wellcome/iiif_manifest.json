@@ -1,0 +1,29 @@
+{
+  "@context": "http://iiif.io/api/presentation/2/context.json",
+  "@id": "https://iiif.wellcomecollection.org/presentation/v2/b28041136",
+  "@type": "sc:Manifest",
+  "label": "Cholera : practical observations on a successful method of treating cholera",
+  "sequences": [
+    {
+      "@type": "sc:Sequence",
+      "canvases": [
+        {
+          "@id": "https://iiif.wellcomecollection.org/presentation/v2/b28041136/canvases/b28041136_0001.jp2",
+          "@type": "sc:Canvas",
+          "label": "Front Cover",
+          "otherContent": [
+            {
+              "@id": "https://iiif.wellcomecollection.org/annotations/v2/b28041136/b28041136_0001.jp2/line",
+              "@type": "sc:AnnotationList"
+            }
+          ]
+        },
+        {
+          "@id": "https://iiif.wellcomecollection.org/presentation/v2/b28041136/canvases/b28041136_0002.jp2",
+          "@type": "sc:Canvas",
+          "label": "Blank page"
+        }
+      ]
+    }
+  ]
+}

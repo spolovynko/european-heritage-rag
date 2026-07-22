@@ -1,0 +1,29 @@
+{
+  "@context": "http://iiif.io/api/presentation/2/context.json",
+  "@id": "https://iiif.wellcomecollection.org/annotations/v2/b28041136/b28041136_0001.jp2/line",
+  "@type": "sc:AnnotationList",
+  "resources": [
+    {
+      "@id": "https://iiif.wellcomecollection.org/annotations/v2/b28041136/b28041136_0001.jp2/line/1",
+      "@type": "oa:Annotation",
+      "motivation": "sc:painting",
+      "resource": {
+        "@type": "cnt:ContentAsText",
+        "format": "text/plain",
+        "chars": "CHOLERA."
+      },
+      "on": "https://iiif.wellcomecollection.org/presentation/v2/b28041136/canvases/b28041136_0001.jp2#xywh=100,200,500,80"
+    },
+    {
+      "@id": "https://iiif.wellcomecollection.org/annotations/v2/b28041136/b28041136_0001.jp2/line/2",
+      "@type": "oa:Annotation",
+      "motivation": "sc:painting",
+      "resource": {
+        "@type": "cnt:ContentAsText",
+        "format": "text/plain",
+        "chars": "PRACTICAL OBSERVATIONS"
+      },
+      "on": "https://iiif.wellcomecollection.org/presentation/v2/b28041136/canvases/b28041136_0001.jp2#xywh=100,300,700,80"
+    }
+  ]
+}

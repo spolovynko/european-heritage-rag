@@ -2,7 +2,9 @@
 
 from enum import StrEnum
 from functools import lru_cache
+from pathlib import Path
 
+from pydantic import AnyHttpUrl, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,6 +31,48 @@ class AppSettings(BaseSettings):
 
     app_env: AppEnvironment = AppEnvironment.LOCAL
     log_level: LogLevel = LogLevel.INFO
+
+    wellcome_catalogue_base_url: AnyHttpUrl = AnyHttpUrl(
+        "https://api.wellcomecollection.org/catalogue/v2/"
+    )
+    wellcome_user_agent: str = Field(
+        default="HeritageRAG/0.1.0",
+        min_length=1,
+    )
+
+    wellcome_connect_timeout_seconds: float = Field(
+        default=5.0,
+        gt=0,
+        le=300,
+    )
+    wellcome_read_timeout_seconds: float = Field(
+        default=30.0,
+        gt=0,
+        le=300,
+    )
+    wellcome_write_timeout_seconds: float = Field(
+        default=30.0,
+        gt=0,
+        le=300,
+    )
+    wellcome_pool_timeout_seconds: float = Field(
+        default=5.0,
+        gt=0,
+        le=300,
+    )
+
+    wellcome_max_attempts: int = Field(
+        default=4,
+        ge=1,
+        le=10,
+    )
+    wellcome_max_retry_wait_seconds: float = Field(
+        default=8.0,
+        gt=0,
+        le=60,
+    )
+
+    ingestion_state_directory: Path = Path("var/ingestion")
 
     model_config = SettingsConfigDict(
         env_file=".env",

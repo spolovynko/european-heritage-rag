@@ -3,9 +3,11 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from importlib.metadata import version
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, status
+from fastapi.staticfiles import StaticFiles
 
 from european_heritage_rag.api.contracts import HealthResponse, ReadinessResponse
 from european_heritage_rag.core.config import AppSettings, get_settings
@@ -14,6 +16,7 @@ from european_heritage_rag.core.logging import configure_logging, get_logger
 _APPLICATION_TITLE = "HeritageRAG"
 _DISTRIBUTION_NAME = "european-heritage-rag"
 _APPLICATION_VERSION = version(_DISTRIBUTION_NAME)
+_DEFAULT_FRONTEND_DIRECTORY = Path("frontend/dist")
 
 
 def get_liveness() -> HealthResponse:
@@ -58,7 +61,9 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         logger.info("application_stopped")
 
 
-def create_app() -> FastAPI:
+def create_app(
+    frontend_directory: Path = _DEFAULT_FRONTEND_DIRECTORY,
+) -> FastAPI:
     """Construct and configure the HeritageRAG API."""
 
     application = FastAPI(
@@ -85,6 +90,14 @@ def create_app() -> FastAPI:
         tags=["health"],
         summary="Check API readiness",
     )
+
+    if frontend_directory.is_dir():
+        application.mount(
+            path="/",
+            app=StaticFiles(directory=frontend_directory, html=True),
+            name="frontend",
+        )
+
     return application
 
 

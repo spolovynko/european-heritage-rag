@@ -9,3 +9,6 @@
 .env
 tests/
 docs/
+
+frontend/node_modules
+frontend/dist

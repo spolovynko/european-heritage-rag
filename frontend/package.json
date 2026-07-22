@@ -2,10 +2,11 @@
   "name": "heritage-rag-frontend",
   "private": true,
   "version": "0.1.0",
+  "packageManager": "pnpm@11.15.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node scripts/prepare-sites-build.mjs",
+    "build": "vite build",
     "preview": "vite preview"
   },
   "devDependencies": {

@@ -3,12 +3,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: european-heritage-rag:phase3
+    image: european-heritage-rag:phase4
     environment:
       APP_ENV: production
       LOG_LEVEL: INFO
     ports:
       - "8000:8000"
+    volumes:
+      - ingestion-state:/app/var/ingestion
     healthcheck:
       test:
         [
@@ -21,3 +23,6 @@ services:
       timeout: 3s
       retries: 3
       start_period: 5s
+
+volumes:
+  ingestion-state:

@@ -84,6 +84,24 @@ def test_unneeded_source_fields_are_ignored() -> None:
     assert page.results[0].work_type.model_dump() == {"id": "a"}
 
 
+def test_physical_catalogue_location_may_omit_url() -> None:
+    """Physical holdings should not invalidate an otherwise usable work."""
+
+    payload = json.loads(read_fixture("catalogue_page.json"))
+    payload["results"][0]["items"][0]["locations"].append(
+        {
+            "locationType": {
+                "id": "closed-stores",
+                "label": "Closed stores",
+            }
+        }
+    )
+
+    page = CatalogueWorksPage.model_validate(payload)
+
+    assert page.results[0].items[0].locations[1].url is None
+
+
 def test_wrong_manifest_type_is_rejected() -> None:
     """A response that is not a manifest should fail validation."""
 
@@ -92,3 +110,23 @@ def test_wrong_manifest_type_is_rejected() -> None:
 
     with pytest.raises(ValidationError):
         IiifManifest.model_validate(payload)
+
+
+def test_non_text_annotation_body_may_omit_type() -> None:
+    """Picture resources should parse so OCR extraction can ignore them."""
+
+    payload = json.loads(read_fixture("ocr_annotation_list.json"))
+    payload["resources"].append(
+        {
+            "@type": "oa:Annotation",
+            "resource": {
+                "@id": "dctypes:Image",
+                "label": "Picture",
+            },
+            "on": "https://example.test/canvas/1",
+        }
+    )
+
+    annotation_list = OcrAnnotationList.model_validate(payload)
+
+    assert annotation_list.resources[-1].resource.resource_type is None

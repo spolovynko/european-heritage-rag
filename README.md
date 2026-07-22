@@ -16,9 +16,12 @@ Phase 1 defined the product boundary, evidence contract, and evaluation goals.
 Phase 2 established the reproducible Python environment, typed configuration,
 structured logging, health API, CLI, automated checks, and container baseline.
 Phase 3 added the frontend shell and serves its production build from FastAPI
-for both local and Docker execution. Phase 4 will add Wellcome work discovery,
-IIIF manifest traversal, and OCR ingestion progress. No dataset has been
-ingested, and the application is not ready for end-user use.
+for both local and Docker execution. Phase 4 added bounded Wellcome work
+discovery, resilient IIIF manifest and OCR traversal, work-level checkpoints,
+resume, a CLI, and real file-backed dashboard progress. The verified live smoke
+test completed 5 works and traversed 246 canvases, 14 of which had no OCR. No
+Bronze corpus has been persisted or indexed, and the application is not ready
+for end-user use.
 
 ## Run the application
 
@@ -48,6 +51,7 @@ Open <http://localhost:8000/>. The operational endpoints are available at:
 
 - <http://localhost:8000/health/live>
 - <http://localhost:8000/health/ready>
+- <http://localhost:8000/ingestion/status>
 - <http://localhost:8000/docs>
 
 Stop the local server with `Ctrl+C`.
@@ -67,6 +71,48 @@ with:
 ```shell
 docker compose down
 ```
+
+## Run Wellcome discovery and traversal
+
+Inspect the Phase 4 command:
+
+```shell
+uv run european-heritage-rag ingest wellcome --help
+```
+
+First perform catalogue-only discovery. A dry run updates dashboard status but
+does not request manifests or OCR and does not create a resume checkpoint:
+
+```shell
+uv run european-heritage-rag ingest wellcome --limit 5 --query cholera --dry-run
+```
+
+Traverse a small source slice:
+
+```shell
+uv run european-heritage-rag ingest wellcome --limit 5 --query cholera
+```
+
+If that run is interrupted or records work failures, retry it with exactly the
+same limit, query, and language:
+
+```shell
+uv run european-heritage-rag ingest wellcome --limit 5 --query cholera --resume
+```
+
+Progress and work-level resume state are written atomically under
+`var/ingestion/`. These files contain control state only. Phase 5 will add
+immutable Bronze copies of source payloads and OCR, so a Phase 4 traversal does
+not yet create a reusable dataset.
+
+With Compose running, use the same command inside the API container:
+
+```shell
+docker compose exec api european-heritage-rag ingest wellcome --limit 5 --query cholera --dry-run
+```
+
+Compose mounts a named volume at `/app/var/ingestion`, preserving status and
+checkpoints when the API container is replaced.
 
 ### Generated frontend directories
 
@@ -160,6 +206,8 @@ search, claims about material outside the indexed corpus, image interpretation,
 handwriting recognition, user document upload, non-public-domain content,
 autonomous research, or exhaustive coverage of the Wellcome catalogue. It is
 not a substitute for reading the original source or consulting a historian.
+Phase 4 source traversal is sequential and English-only, resumes at work rather
+than canvas granularity, and does not persist raw payloads or cleaned OCR.
 
 ## Documentation
 
@@ -171,6 +219,8 @@ not a substitute for reading the original source or consulting a historian.
 - [ADR-0001: Project scope and evidence contract](docs/adr/0001-project-scope-and-evidence-contract.md)
 - [ADR-0002: Python, dependency management, and repository structure](docs/adr/0002-python-dependency-management-and-repository-structure.md)
 - [ADR-0003: Browser-native UI foundation and same-origin FastAPI delivery](docs/adr/0003-browser-native-ui-and-fastapi-delivery.md)
+- [ADR-0004: Wellcome API and IIIF ingestion strategy](docs/adr/0004-wellcome-api-and-iiif-ingestion-strategy.md)
 - [Building guides](docs/building_guides/README.md)
 - [Phase 3 implementation guide](docs/building_guides/phase-03-ui-foundation-and-progress-dashboard.md)
+- [Phase 4 implementation guide](docs/building_guides/phase-04-wellcome-discovery-and-ingestion-client.md)
 - [Development and learning agreement](docs/learning-guide-agreement.md)

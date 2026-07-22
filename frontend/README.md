@@ -1,6 +1,6 @@
-# HeritageRAG frontend prototype
+# HeritageRAG frontend
 
-This Phase 3 prototype keeps its concerns deliberately separate:
+The browser application keeps its concerns deliberately separate:
 
 - `index.html` contains the semantic page structure.
 - `styles.css` contains the responsive visual system.
@@ -22,9 +22,10 @@ pnpm install
 pnpm dev
 ```
 
-Open `http://127.0.0.1:5173`. Vite forwards `/health` requests to the backend
-on port `8000`. The browser uses this same path when FastAPI serves the built
-frontend, so the API contract does not change between development and runtime.
+Open `http://127.0.0.1:5173`. Vite forwards `/health` and `/ingestion` requests
+to the backend on port `8000`. The browser uses these same relative paths when
+FastAPI serves the built frontend, so the API contract does not change between
+development and runtime.
 
 ## Verify the production build
 
@@ -33,5 +34,13 @@ cd frontend
 pnpm build
 ```
 
-The ingestion counts and explorer records are explicitly labelled demo data.
-Only the system-health indicator calls the real backend in this phase.
+The system-health indicator calls `/health/ready`. The Phase 4 ingestion
+dashboard calls `/ingestion/status` immediately and then every three seconds.
+It displays persisted CLI-run status but does not start ingestion itself; use:
+
+```powershell
+uv run european-heritage-rag ingest wellcome --limit 5 --dry-run
+```
+
+Data explorer records, retrieval state, evaluation values, and chat answers
+remain explicitly labelled demonstration or future behavior.

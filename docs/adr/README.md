@@ -13,6 +13,7 @@ new number and mark the earlier record superseded.
 | [ADR-0001: Project scope and evidence contract](0001-project-scope-and-evidence-contract.md) | Accepted | 2026-07-20 | Begin with English public-domain Wellcome books, require current-turn page evidence, and use deterministic two-step RAG as the evaluated baseline. |
 | [ADR-0002: Python, dependency management, and repository structure](0002-python-dependency-management-and-repository-structure.md) | Accepted | 2026-07-21 | Use Python 3.12, `uv`, a root `src` layout, progressive dependencies, and a minimal one-service container baseline. |
 | [ADR-0003: Browser-native UI foundation and same-origin FastAPI delivery](0003-browser-native-ui-and-fastapi-delivery.md) | Accepted | 2026-07-22 | Build the diagnostic UI before ingestion with separated browser-native assets and Vite, serve it from FastAPI on one origin, and defer React and TypeScript until real client complexity justifies migration. |
+| [ADR-0004: Wellcome API and IIIF ingestion strategy](0004-wellcome-api-and-iiif-ingestion-strategy.md) | Accepted | 2026-07-22 | Discover public-domain online books through Catalogue API v2, traverse IIIF OCR sequentially with bounded retries, and expose atomic file-backed status and resumable work checkpoints. |
 
 ## Supporting documents
 

@@ -31,7 +31,9 @@ RUN uv sync --locked --no-dev --no-editable
 
 ENV PATH="/app/.venv/bin:$PATH"
 
-RUN useradd --create-home --uid 10001 appuser
+RUN useradd --create-home --uid 10001 appuser \
+    && mkdir -p /app/var/ingestion \
+    && chown -R appuser:appuser /app/var
 USER appuser
 
 EXPOSE 8000

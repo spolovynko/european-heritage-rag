@@ -1,4 +1,6 @@
 const HEALTH_ENDPOINT = "/health/ready";
+const INGESTION_STATUS_ENDPOINT = "/ingestion/status";
+const INGESTION_POLL_INTERVAL_MS = 3000;
 
 /**
  * @typedef {Object} HealthResponse
@@ -6,6 +8,32 @@ const HEALTH_ENDPOINT = "/health/ready";
  * @property {string} service
  * @property {string} version
  * @property {Record<string, "ok">} checks
+ */
+
+/**
+ * @typedef {Object} IngestionEvent
+ * @property {string} timestamp
+ * @property {"info" | "warning" | "error"} level
+ * @property {string} message
+ * @property {string | null} work_id
+ */
+
+/**
+ * @typedef {Object} IngestionStatus
+ * @property {"idle" | "running" | "completed" | "completed_with_failures" | "failed"} status
+ * @property {string | null} run_id
+ * @property {number} requested_limit
+ * @property {boolean} dry_run
+ * @property {string | null} current_work_id
+ * @property {string | null} current_work_title
+ * @property {number} works_discovered
+ * @property {number} works_completed
+ * @property {number} pages_downloaded
+ * @property {number} missing_ocr_pages
+ * @property {number} retry_count
+ * @property {number} failure_count
+ * @property {IngestionEvent[]} recent_events
+ * @property {string | null} updated_at
  */
 
 /**
@@ -104,6 +132,7 @@ const viewNames = {
 const state = {
   activeRecordId: sampleRecords[0].id,
   activePageIndex: 0,
+  ingestionRefreshPending: false,
   toastTimer: 0
 };
 
@@ -114,6 +143,28 @@ const elements = {
   currentView: document.querySelector("[data-current-view]"),
   healthButton: document.querySelector("[data-health-refresh]"),
   healthLabel: document.querySelector("[data-health-label]"),
+  ingestionWorks: document.querySelector("[data-ingestion-works]"),
+  ingestionNavCount: document.querySelector("[data-ingestion-nav-count]"),
+  ingestionDiscovered: document.querySelector("[data-ingestion-discovered]"),
+  ingestionPages: document.querySelector("[data-ingestion-pages]"),
+  ingestionMissing: document.querySelector("[data-ingestion-missing]"),
+  ingestionFailures: document.querySelector("[data-ingestion-failures]"),
+  ingestionRetries: document.querySelector("[data-ingestion-retries]"),
+  ingestionStatus: document.querySelector("[data-ingestion-status]"),
+  ingestionUpdated: document.querySelector("[data-ingestion-updated]"),
+  ingestionBadge: document.querySelector("[data-ingestion-badge]"),
+  ingestionRunId: document.querySelector("[data-ingestion-run-id]"),
+  ingestionPercent: document.querySelector("[data-ingestion-percent]"),
+  ingestionProgress: document.querySelector("[data-ingestion-progress]"),
+  ingestionProgressBar: document.querySelector("[data-ingestion-progress-bar]"),
+  ingestionCurrentWork: document.querySelector("[data-ingestion-current-work]"),
+  ingestionDiscoveryStage: document.querySelector("[data-ingestion-discovery-stage]"),
+  ingestionCompletedStage: document.querySelector("[data-ingestion-completed-stage]"),
+  ingestionOcrStage: document.querySelector("[data-ingestion-ocr-stage]"),
+  ingestionResultStage: document.querySelector("[data-ingestion-result-stage]"),
+  ingestionEvents: document.querySelector("[data-ingestion-events]"),
+  ingestionAttentionTitle: document.querySelector("[data-ingestion-attention-title]"),
+  ingestionAttentionDetail: document.querySelector("[data-ingestion-attention-detail]"),
   recordList: document.querySelector("[data-record-list]"),
   recordCount: document.querySelector("[data-record-count]"),
   recordEmpty: document.querySelector("[data-record-empty]"),
@@ -198,6 +249,152 @@ async function refreshHealth() {
   } finally {
     window.clearTimeout(timeoutId);
     elements.healthButton.disabled = false;
+  }
+}
+
+const ingestionStatusLabels = {
+  idle: "Idle",
+  running: "In progress",
+  completed: "Completed",
+  completed_with_failures: "Completed with failures",
+  failed: "Failed"
+};
+
+const ingestionBadgeStyles = {
+  idle: "planned",
+  running: "active",
+  completed: "ready",
+  completed_with_failures: "review",
+  failed: "review"
+};
+
+function formatEventTime(value) {
+  const timestamp = new Date(value);
+  if (Number.isNaN(timestamp.getTime())) return "Unknown time";
+  return timestamp.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  });
+}
+
+function renderIngestionEvents(events) {
+  elements.ingestionEvents.replaceChildren();
+
+  if (events.length === 0) {
+    const item = document.createElement("li");
+    const mark = document.createElement("span");
+    const detail = document.createElement("div");
+    const title = document.createElement("strong");
+    const description = document.createElement("p");
+    const time = document.createElement("time");
+
+    mark.className = "activity-mark";
+    mark.setAttribute("aria-hidden", "true");
+    title.textContent = "No ingestion events yet";
+    description.textContent = "Run the Wellcome CLI command to begin.";
+    time.textContent = "Idle";
+    detail.append(title, description, time);
+    item.append(mark, detail);
+    elements.ingestionEvents.append(item);
+    return;
+  }
+
+  [...events].reverse().forEach((event) => {
+    const item = document.createElement("li");
+    const mark = document.createElement("span");
+    const detail = document.createElement("div");
+    const title = document.createElement("strong");
+    const description = document.createElement("p");
+    const time = document.createElement("time");
+
+    mark.className = `activity-mark activity-mark--${event.level === "info" ? "success" : "warning"}`;
+    mark.setAttribute("aria-hidden", "true");
+    mark.textContent = event.level === "info" ? "✓" : "!";
+    title.textContent = event.message;
+    description.textContent = event.work_id ? `Work ${event.work_id}` : "Ingestion run";
+    time.textContent = formatEventTime(event.timestamp);
+    time.dateTime = event.timestamp;
+    detail.append(title, description, time);
+    item.append(mark, detail);
+    elements.ingestionEvents.append(item);
+  });
+}
+
+function renderIngestionStatus(status) {
+  const statusLabel = ingestionStatusLabels[status.status] || status.status;
+  const denominator = status.works_discovered || status.requested_limit;
+  const completedPercent = denominator > 0
+    ? Math.round((status.works_completed / denominator) * 100)
+    : 0;
+  const percent = status.dry_run && status.status === "completed"
+    ? 100
+    : Math.min(100, completedPercent);
+
+  elements.ingestionWorks.textContent = `${status.works_completed} / ${status.works_discovered}`;
+  elements.ingestionDiscovered.textContent = status.works_discovered
+    ? `${status.works_discovered} eligible works discovered`
+    : "No run has started";
+  elements.ingestionPages.textContent = status.pages_downloaded.toLocaleString();
+  elements.ingestionMissing.textContent = `${status.missing_ocr_pages} without OCR`;
+  elements.ingestionFailures.textContent = status.failure_count;
+  elements.ingestionNavCount.textContent = status.failure_count;
+  elements.ingestionRetries.textContent = `${status.retry_count} retries`;
+  elements.ingestionStatus.textContent = statusLabel;
+  elements.ingestionUpdated.textContent = status.updated_at
+    ? `Updated at ${formatEventTime(status.updated_at)}`
+    : "Waiting for a CLI run";
+  elements.ingestionBadge.textContent = statusLabel;
+  elements.ingestionBadge.className = `state-badge state-badge--${ingestionBadgeStyles[status.status] || "planned"}`;
+  elements.ingestionRunId.textContent = status.run_id || "No ingestion run yet";
+  elements.ingestionPercent.textContent = `${percent}%`;
+  elements.ingestionProgress.setAttribute("aria-valuenow", String(percent));
+  elements.ingestionProgressBar.style.width = `${percent}%`;
+  elements.ingestionCurrentWork.textContent = status.current_work_title
+    ? `Current work: ${status.current_work_title}`
+    : status.status === "idle"
+      ? "Waiting for catalogue discovery"
+      : `Run status: ${statusLabel}`;
+  elements.ingestionDiscoveryStage.textContent = `${status.works_discovered} selected`;
+  elements.ingestionCompletedStage.textContent = `${status.works_completed} completed`;
+  elements.ingestionOcrStage.textContent = `${status.pages_downloaded} pages`;
+  elements.ingestionResultStage.textContent = statusLabel;
+  elements.ingestionAttentionTitle.textContent = status.failure_count === 0
+    ? "No terminal failures"
+    : `${status.failure_count} work failure${status.failure_count === 1 ? "" : "s"}`;
+  elements.ingestionAttentionDetail.textContent = (
+    `${status.missing_ocr_pages} pages have no OCR; ` +
+    `${status.retry_count} retry waits were recorded.`
+  );
+
+  renderIngestionEvents(status.recent_events);
+}
+
+async function refreshIngestionStatus() {
+  if (state.ingestionRefreshPending) return;
+  state.ingestionRefreshPending = true;
+
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 3500);
+
+  try {
+    const response = await fetch(INGESTION_STATUS_ENDPOINT, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`Ingestion status returned ${response.status}`);
+
+    /** @type {IngestionStatus} */
+    const ingestionStatus = await response.json();
+    renderIngestionStatus(ingestionStatus);
+  } catch {
+    elements.ingestionStatus.textContent = "Unavailable";
+    elements.ingestionUpdated.textContent = "Could not reach ingestion status API";
+    elements.ingestionBadge.textContent = "Unavailable";
+    elements.ingestionBadge.className = "state-badge state-badge--review";
+  } finally {
+    window.clearTimeout(timeoutId);
+    state.ingestionRefreshPending = false;
   }
 }
 
@@ -381,3 +578,5 @@ syncSidebarAccessibility();
 renderRecordList();
 renderActiveRecord({ showLoading: true });
 refreshHealth();
+refreshIngestionStatus();
+window.setInterval(refreshIngestionStatus, INGESTION_POLL_INTERVAL_MS);

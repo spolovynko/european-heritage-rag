@@ -27,7 +27,7 @@ class DigitalLocation(WellcomeSourceModel):
     """Digital location attached to a Wellcome catalogue item."""
 
     location_type: IdentifierReference = Field(alias="locationType")
-    url: AnyHttpUrl
+    url: AnyHttpUrl | None = None
     licence: LicenceReference | None = Field(default=None, alias="license")
 
 
@@ -97,7 +97,7 @@ class IiifManifest(WellcomeSourceModel):
 class AnnotationBody(WellcomeSourceModel):
     """Body of an annotation, which may or may not contain OCR text."""
 
-    resource_type: str = Field(alias="@type", min_length=1)
+    resource_type: str | None = Field(default=None, alias="@type", min_length=1)
     format: str | None = None
     chars: str | None = None
 
@@ -118,3 +118,23 @@ class OcrAnnotationList(WellcomeSourceModel):
     id: AnyHttpUrl = Field(alias="@id")
     resource_type: Literal["sc:AnnotationList"] = Field(alias="@type")
     resources: tuple[IiifAnnotation, ...] = ()
+
+
+class TraversedPage(WellcomeSourceModel):
+    """One canvas and the OCR text found while traversing it."""
+
+    canvas_index: int = Field(ge=0)
+    canvas_id: AnyHttpUrl
+    label: str = Field(min_length=1)
+    annotation_list_urls: tuple[AnyHttpUrl, ...] = ()
+    ocr_lines: tuple[str, ...] = ()
+    text: str | None = None
+
+
+class TraversedWork(WellcomeSourceModel):
+    """A discovered work after its manifest and canvases were traversed."""
+
+    work_id: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    manifest_url: AnyHttpUrl
+    pages: tuple[TraversedPage, ...] = ()

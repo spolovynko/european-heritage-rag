@@ -46,7 +46,7 @@
             <button class="nav-item is-active" type="button" data-view="dashboard" aria-current="page">
               <span class="nav-icon" aria-hidden="true">▦</span>
               <span>Ingestion</span>
-              <span class="nav-count">2</span>
+              <span class="nav-count" data-ingestion-nav-count>0</span>
             </button>
             <button class="nav-item" type="button" data-view="data">
               <span class="nav-icon" aria-hidden="true">▤</span>
@@ -77,7 +77,7 @@
           </div>
           <div class="phase-row">
             <span class="status-dot status-dot--amber" aria-hidden="true"></span>
-            <span>Phase 3 prototype</span>
+            <span>Phase 4 source ingestion</span>
           </div>
         </div>
       </aside>
@@ -95,7 +95,7 @@
           </div>
 
           <div class="topbar-actions">
-            <span class="demo-badge">Demo data</span>
+            <span class="demo-badge">Live ingestion · demo explorer</span>
             <button class="system-status is-checking" type="button" data-health-refresh aria-live="polite">
               <span class="system-status-dot" aria-hidden="true"></span>
               <span data-health-label>Checking system</span>
@@ -112,37 +112,37 @@
                 <h1 id="dashboard-title">Ingestion overview</h1>
                 <p>Follow each work from catalogue discovery to validated OCR pages.</p>
               </div>
-              <button class="secondary-button" type="button" data-notice="A new run will be available when ingestion is connected.">
+              <button class="secondary-button" type="button" data-notice="Start a run with: european-heritage-rag ingest wellcome --limit 5">
                 <span aria-hidden="true">＋</span> New run
               </button>
             </div>
 
             <div class="notice-banner" role="note">
               <span class="notice-icon" aria-hidden="true">i</span>
-              <p><strong>Prototype workspace.</strong> Pipeline figures are typed sample data; system health is requested from the live API.</p>
+              <p><strong>Live ingestion status.</strong> Start runs from the CLI; this dashboard polls the file-backed API status every three seconds.</p>
               <button type="button" aria-label="Dismiss notice" data-dismiss-notice>×</button>
             </div>
 
             <div class="metric-grid" aria-label="Ingestion summary">
               <article class="metric-card">
                 <div class="metric-topline"><span>Works</span><span class="metric-symbol">▱</span></div>
-                <strong>24</strong>
-                <p><span class="positive-text">+6</span> since previous run</p>
+                <strong data-ingestion-works>0 / 0</strong>
+                <p data-ingestion-discovered>No run has started</p>
               </article>
               <article class="metric-card">
                 <div class="metric-topline"><span>OCR pages</span><span class="metric-symbol">≡</span></div>
-                <strong>4,816</strong>
-                <p>3,276 processed</p>
+                <strong data-ingestion-pages>0</strong>
+                <p data-ingestion-missing>0 without OCR</p>
               </article>
               <article class="metric-card metric-card--warning">
                 <div class="metric-topline"><span>Needs attention</span><span class="metric-symbol">!</span></div>
-                <strong>2</strong>
-                <p>1 missing OCR · 1 metadata</p>
+                <strong data-ingestion-failures>0</strong>
+                <p data-ingestion-retries>0 retries</p>
               </article>
               <article class="metric-card">
-                <div class="metric-topline"><span>Last successful run</span><span class="metric-symbol">◷</span></div>
-                <strong class="metric-time">8 min</strong>
-                <p>Completed at 10:42</p>
+                <div class="metric-topline"><span>Run status</span><span class="metric-symbol">◷</span></div>
+                <strong class="metric-time" data-ingestion-status>Idle</strong>
+                <p data-ingestion-updated>Waiting for a CLI run</p>
               </article>
             </div>
 
@@ -152,82 +152,70 @@
                   <div>
                     <div class="title-with-badge">
                       <h2>Current ingestion</h2>
-                      <span class="state-badge state-badge--active"><span></span>In progress</span>
+                      <span class="state-badge state-badge--planned" data-ingestion-badge>Idle</span>
                     </div>
-                    <p>wellcome-smoke-test-03</p>
+                    <p data-ingestion-run-id>No ingestion run yet</p>
                   </div>
-                  <button class="text-button" type="button" data-notice="Detailed run logs will arrive with the ingestion pipeline.">View run details</button>
+                  <button class="text-button" type="button" data-notice="The latest 20 run events are shown in the activity panel.">Run details</button>
                 </div>
 
                 <div class="progress-summary">
                   <div>
                     <span>Overall progress</span>
-                    <strong>68%</strong>
+                    <strong data-ingestion-percent>0%</strong>
                   </div>
-                  <div class="progress-track" role="progressbar" aria-valuenow="68" aria-valuemin="0" aria-valuemax="100" aria-label="Overall ingestion progress">
-                    <span style="width: 68%"></span>
+                  <div class="progress-track" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Overall ingestion progress" data-ingestion-progress>
+                    <span style="width: 0%" data-ingestion-progress-bar></span>
                   </div>
-                  <p>3,276 of 4,816 pages processed</p>
+                  <p data-ingestion-current-work>Waiting for catalogue discovery</p>
                 </div>
 
                 <ol class="stage-list">
                   <li class="stage-item is-complete">
                     <span class="stage-marker" aria-hidden="true">✓</span>
-                    <div><strong>Catalogue discovery</strong><span>24 works selected</span></div>
-                    <span class="stage-value">24 / 24</span>
+                    <div><strong>Catalogue discovery</strong><span>Eligible works returned by Wellcome</span></div>
+                    <span class="stage-value" data-ingestion-discovery-stage>Not started</span>
                   </li>
                   <li class="stage-item is-complete">
                     <span class="stage-marker" aria-hidden="true">✓</span>
-                    <div><strong>Metadata capture</strong><span>Licences and source links preserved</span></div>
-                    <span class="stage-value">24 / 24</span>
+                    <div><strong>Work traversal</strong><span>Manifest and canvas traversal completed</span></div>
+                    <span class="stage-value" data-ingestion-completed-stage>0 completed</span>
                   </li>
                   <li class="stage-item is-active">
                     <span class="stage-marker" aria-hidden="true"></span>
-                    <div><strong>OCR extraction</strong><span>Processing page text and canvas order</span></div>
-                    <span class="stage-value">3,276 / 4,816</span>
+                    <div><strong>OCR extraction</strong><span>Exact source lines retained in canvas order</span></div>
+                    <span class="stage-value" data-ingestion-ocr-stage>0 pages</span>
                   </li>
                   <li class="stage-item">
                     <span class="stage-marker" aria-hidden="true">4</span>
-                    <div><strong>Validation</strong><span>Waiting for OCR extraction</span></div>
-                    <span class="stage-value">Queued</span>
+                    <div><strong>Run result</strong><span>Status and checkpoint updated after each work</span></div>
+                    <span class="stage-value" data-ingestion-result-stage>Waiting</span>
                   </li>
                 </ol>
               </article>
 
               <article class="panel activity-panel">
                 <div class="panel-header compact-header">
-                  <div><h2>Recent activity</h2><p>Live run events</p></div>
-                  <span class="live-label"><span></span>Live</span>
+                  <div><h2>Recent activity</h2><p>Latest persisted run events</p></div>
+                  <span class="live-label"><span></span>Polling</span>
                 </div>
-                <ol class="activity-list">
+                <ol class="activity-list" data-ingestion-events>
                   <li>
-                    <span class="activity-mark activity-mark--working" aria-hidden="true"></span>
-                    <div><strong>Extracting OCR pages</strong><p>On the preservation of public health</p><time>Just now</time></div>
-                  </li>
-                  <li>
-                    <span class="activity-mark activity-mark--success" aria-hidden="true">✓</span>
-                    <div><strong>Metadata validated</strong><p>Reports on cholera in London</p><time>2 min ago</time></div>
-                  </li>
-                  <li>
-                    <span class="activity-mark activity-mark--warning" aria-hidden="true">!</span>
-                    <div><strong>OCR unavailable</strong><p>Medical observations, volume II</p><time>4 min ago</time></div>
-                  </li>
-                  <li>
-                    <span class="activity-mark activity-mark--success" aria-hidden="true">✓</span>
-                    <div><strong>IIIF manifest stored</strong><p>Notes on sanitary reform</p><time>6 min ago</time></div>
+                    <span class="activity-mark" aria-hidden="true"></span>
+                    <div><strong>No ingestion events yet</strong><p>Run the Wellcome CLI command to begin.</p><time>Idle</time></div>
                   </li>
                 </ol>
-                <button class="activity-footer" type="button" data-notice="The full event stream will arrive with ingestion.">View all activity <span aria-hidden="true">→</span></button>
+                <button class="activity-footer" type="button" data-notice="Phase 4 retains the latest 20 events; durable run history arrives with Bronze storage.">Event retention <span aria-hidden="true">→</span></button>
               </article>
 
               <article class="panel attention-panel">
                 <div class="attention-icon" aria-hidden="true">!</div>
                 <div>
                   <p class="kicker">Attention required</p>
-                  <h2>Two records need review</h2>
-                  <p>One work has no OCR resource and another is missing a confirmed public-domain licence.</p>
+                  <h2 data-ingestion-attention-title>No failures</h2>
+                  <p data-ingestion-attention-detail>Missing OCR is reported separately and does not fail a work.</p>
                 </div>
-                <button class="secondary-button" type="button" data-notice="Review filters will be enabled when real records are ingested.">Review records</button>
+                <button class="secondary-button" type="button" data-notice="Inspect the recent events or var/ingestion/wellcome-status.json for failure details.">Review status</button>
               </article>
             </div>
           </section>

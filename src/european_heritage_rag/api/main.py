@@ -12,6 +12,10 @@ from fastapi.staticfiles import StaticFiles
 from european_heritage_rag.api.contracts import HealthResponse, ReadinessResponse
 from european_heritage_rag.core.config import AppSettings, get_settings
 from european_heritage_rag.core.logging import configure_logging, get_logger
+from european_heritage_rag.sources.wellcome.ingestion import (
+    IngestionStateStore,
+    IngestionStatus,
+)
 
 _APPLICATION_TITLE = "HeritageRAG"
 _DISTRIBUTION_NAME = "european-heritage-rag"
@@ -39,6 +43,14 @@ async def get_readiness(
         version=_APPLICATION_VERSION,
         checks={"configuration": "ok"},
     )
+
+
+def get_ingestion_status(
+    settings: Annotated[AppSettings, Depends(get_settings)],
+) -> IngestionStatus:
+    """Return the latest file-backed Wellcome ingestion status."""
+
+    return IngestionStateStore(settings.ingestion_state_directory).load_status()
 
 
 logger = get_logger(__name__)
@@ -89,6 +101,16 @@ def create_app(
         status_code=status.HTTP_200_OK,
         tags=["health"],
         summary="Check API readiness",
+    )
+
+    application.add_api_route(
+        path="/ingestion/status",
+        endpoint=get_ingestion_status,
+        methods=["GET"],
+        response_model=IngestionStatus,
+        status_code=status.HTTP_200_OK,
+        tags=["ingestion"],
+        summary="Get the latest Wellcome ingestion status",
     )
 
     if frontend_directory.is_dir():

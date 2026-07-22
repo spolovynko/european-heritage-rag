@@ -40,6 +40,7 @@
 
 html {
   min-width: 320px;
+  overflow-x: hidden;
   background: var(--canvas);
 }
 
@@ -1902,6 +1903,7 @@ html {
 
 body {
   position: relative;
+  overflow-x: hidden;
   color: var(--ink);
   background:
     radial-gradient(circle at 80% -10%, rgb(112 69 255 / 22%), transparent 34rem),
@@ -3056,6 +3058,29 @@ a:focus-visible {
 
   .pipeline-panel {
     padding: 17px;
+  }
+
+  .pipeline-panel::after {
+    display: none;
+  }
+
+  .panel-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .title-with-badge {
+    flex-wrap: wrap;
+  }
+
+  .stage-item {
+    grid-template-columns: 28px minmax(0, 1fr);
+    padding: 5px 0;
+  }
+
+  .stage-value {
+    grid-column: 2;
+    justify-self: start;
   }
 
   .chat-shell {

@@ -15,6 +15,7 @@ The documentation areas have different responsibilities:
 
 - [Phase 2: environment and repository setup](phase-02-environment-and-repository-setup.md)
 - [Phase 3: UI foundation and progress dashboard](phase-03-ui-foundation-and-progress-dashboard.md)
+- [Phase 4: Wellcome discovery and ingestion client](phase-04-wellcome-discovery-and-ingestion-client.md)
 
 ## Update convention
 

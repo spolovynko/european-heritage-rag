@@ -14,6 +14,7 @@ The documentation areas have different responsibilities:
 ## Guides
 
 - [Phase 2: environment and repository setup](phase-02-environment-and-repository-setup.md)
+- [Phase 3: UI foundation and progress dashboard](phase-03-ui-foundation-and-progress-dashboard.md)
 
 ## Update convention
 

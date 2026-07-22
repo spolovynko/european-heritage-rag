@@ -15,8 +15,72 @@ project whose behaviour can be explained, tested, and defended.
 Phase 1 defined the product boundary, evidence contract, and evaluation goals.
 Phase 2 established the reproducible Python environment, typed configuration,
 structured logging, health API, CLI, automated checks, and container baseline.
-Phase 3 is building the frontend shell and preparing to serve it from FastAPI.
-No dataset has been ingested, and the application is not ready for end-user use.
+Phase 3 added the frontend shell and serves its production build from FastAPI
+for both local and Docker execution. Phase 4 will add Wellcome work discovery,
+IIIF manifest traversal, and OCR ingestion progress. No dataset has been
+ingested, and the application is not ready for end-user use.
+
+## Run the application
+
+The frontend build output and installed JavaScript dependencies are generated
+locally. A fresh clone contains everything required to reproduce them through
+the committed source files and lockfiles.
+
+### Run locally
+
+Prerequisites:
+
+- Python 3.12 and [`uv`](https://docs.astral.sh/uv/)
+- Node.js 24
+- pnpm 11.15.1
+
+From the repository root:
+
+```shell
+uv sync --locked
+npm install --global pnpm@11.15.1
+pnpm --dir frontend install --frozen-lockfile
+pnpm --dir frontend build
+uv run uvicorn european_heritage_rag.api.main:app --host 127.0.0.1 --port 8000
+```
+
+Open <http://localhost:8000/>. The operational endpoints are available at:
+
+- <http://localhost:8000/health/live>
+- <http://localhost:8000/health/ready>
+- <http://localhost:8000/docs>
+
+Stop the local server with `Ctrl+C`.
+
+### Run with Docker Compose
+
+This workflow requires Docker only. The image installs and builds both the
+frontend and backend inside reproducible build stages:
+
+```shell
+docker compose up --detach --build
+```
+
+Open <http://localhost:8000/>. Stop and remove the Compose container and network
+with:
+
+```shell
+docker compose down
+```
+
+### Generated frontend directories
+
+The following directories are intentionally excluded from Git:
+
+- `frontend/node_modules/` contains packages installed from `package.json` and
+  `pnpm-lock.yaml`. Recreate it with
+  `pnpm --dir frontend install --frozen-lockfile`.
+- `frontend/dist/` contains the production HTML, CSS, and JavaScript served by
+  FastAPI. Recreate it with `pnpm --dir frontend build`.
+
+Deleting these directories does not remove source code. Local execution must
+recreate them before the frontend can be built or served. Docker builds its own
+copies and does not use either local directory.
 
 ## Who it is for
 
@@ -106,5 +170,7 @@ not a substitute for reading the original source or consulting a historian.
 - [ADR index](docs/adr/README.md)
 - [ADR-0001: Project scope and evidence contract](docs/adr/0001-project-scope-and-evidence-contract.md)
 - [ADR-0002: Python, dependency management, and repository structure](docs/adr/0002-python-dependency-management-and-repository-structure.md)
+- [ADR-0003: Browser-native UI foundation and same-origin FastAPI delivery](docs/adr/0003-browser-native-ui-and-fastapi-delivery.md)
 - [Building guides](docs/building_guides/README.md)
+- [Phase 3 implementation guide](docs/building_guides/phase-03-ui-foundation-and-progress-dashboard.md)
 - [Development and learning agreement](docs/learning-guide-agreement.md)

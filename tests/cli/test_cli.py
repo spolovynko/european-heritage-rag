@@ -29,6 +29,7 @@ def test_help_lists_available_commands() -> None:
     assert "Operate and inspect the HeritageRAG application." in result.output
     assert "ingest" in result.output
     assert "bronze" in result.output
+    assert "silver" in result.output
     assert "version" in result.output
 
 
@@ -160,3 +161,41 @@ def test_bronze_validate_reports_invalid_manifest(tmp_path: Path) -> None:
     assert result.exit_code == 1
     assert "invalid manifest" in result.output
     assert "Traceback" not in result.output
+
+
+def test_silver_inspect_reports_empty_store(tmp_path: Path) -> None:
+    """Inspection should not invent normalized datasets."""
+
+    settings = AppSettings(
+        _env_file=None,
+        silver_data_directory=tmp_path / "silver",
+    )
+    with patch(
+        "european_heritage_rag.cli.get_settings",
+        return_value=settings,
+    ):
+        result = runner.invoke(app, ["silver", "inspect"])
+
+    assert result.exit_code == 0
+    assert "No Silver datasets found." in result.output
+
+
+def test_silver_build_rejects_unknown_bronze_run(tmp_path: Path) -> None:
+    """An explicit Bronze input must exist before transformation."""
+
+    settings = AppSettings(
+        _env_file=None,
+        bronze_data_directory=tmp_path / "bronze",
+        silver_data_directory=tmp_path / "silver",
+    )
+    with patch(
+        "european_heritage_rag.cli.get_settings",
+        return_value=settings,
+    ):
+        result = runner.invoke(
+            app,
+            ["silver", "build", "--bronze-run-id", "missing"],
+        )
+
+    assert result.exit_code == 1
+    assert "Bronze run not found: missing" in result.output

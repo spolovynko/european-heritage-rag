@@ -15,6 +15,7 @@ new number and mark the earlier record superseded.
 | [ADR-0003: Browser-native UI foundation and same-origin FastAPI delivery](0003-browser-native-ui-and-fastapi-delivery.md) | Accepted | 2026-07-22 | Build the diagnostic UI before ingestion with separated browser-native assets and Vite, serve it from FastAPI on one origin, and defer React and TypeScript until real client complexity justifies migration. |
 | [ADR-0004: Wellcome API and IIIF ingestion strategy](0004-wellcome-api-and-iiif-ingestion-strategy.md) | Accepted | 2026-07-22 | Discover public-domain online books through Catalogue API v2, traverse IIIF OCR sequentially with bounded retries, and expose atomic file-backed status and resumable work checkpoints. |
 | [ADR-0005: Append-only Bronze storage and idempotent ingestion](0005-append-only-bronze-storage-and-idempotent-ingestion.md) | Accepted | 2026-07-23 | Preserve raw Wellcome resources in run-partitioned local filesystem storage with stable identities, SHA-256 receipts, atomic writes, and idempotent resume. |
+| [ADR-0006: Canonical work/page schemas and conservative OCR cleaning](0006-canonical-work-page-schemas-and-conservative-ocr-cleaning.md) | Accepted | 2026-07-23 | Separate canonical works and pages, preserve raw beside conservatively cleaned OCR, publish deterministic lineage-rich Parquet datasets, and expose quality as flags rather than assumed accuracy. |
 
 ## Supporting documents
 

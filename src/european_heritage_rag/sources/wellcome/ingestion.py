@@ -13,11 +13,13 @@ from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field
 
 from european_heritage_rag.core.config import AppSettings
 from european_heritage_rag.pipeline.bronze import (
+    SILVER_READY_WELLCOME_INCLUDE,
     BronzeResourceIdentity,
     BronzeResourceType,
     BronzeRunIdentity,
     BronzeRunStatus,
     WellcomeBronzeParameters,
+    WellcomeInclude,
 )
 from european_heritage_rag.pipeline.bronze_run import BronzeRunRecorder
 from european_heritage_rag.pipeline.bronze_store import BronzeFilesystemStore
@@ -182,6 +184,7 @@ def ingestion_fingerprint(
     limit: int,
     query: str | None,
     language: str,
+    include: WellcomeInclude = SILVER_READY_WELLCOME_INCLUDE,
 ) -> str:
     """Create a stable fingerprint for options that define a resumable run."""
 
@@ -191,6 +194,7 @@ def ingestion_fingerprint(
             "language": language,
             "limit": limit,
             "query": normalized_query,
+            "include": include,
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -260,6 +264,7 @@ class WellcomeIngestionRunner:
                     limit=limit,
                     query=normalized_query,
                     language="eng",
+                    include=SILVER_READY_WELLCOME_INCLUDE,
                 ),
                 catalogue_base_url=self._catalogue_base_url,
                 pipeline_version=self._pipeline_version,

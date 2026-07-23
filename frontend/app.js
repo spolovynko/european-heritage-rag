@@ -1,12 +1,13 @@
 const HEALTH_ENDPOINT = "/health/ready";
 const INGESTION_STATUS_ENDPOINT = "/ingestion/status";
 const BRONZE_RUNS_ENDPOINT = "/bronze/runs";
+const SILVER_DATASETS_ENDPOINT = "/silver/datasets";
 const INGESTION_POLL_INTERVAL_MS = 3000;
 
 const viewNames = {
   chat: "Chat",
   dashboard: "Ingestion",
-  data: "Bronze explorer",
+  data: "Data explorer",
   retrieval: "Retrieval",
   evaluation: "Evaluation"
 };
@@ -15,6 +16,12 @@ const state = {
   bronzeRuns: [],
   activeBronzeRun: null,
   activeBronzeResource: null,
+  silverDatasets: [],
+  activeSilverDataset: null,
+  silverWorks: [],
+  silverPages: [],
+  silverPageTotal: 0,
+  activeSilverPage: null,
   ingestionRefreshPending: false,
   toastTimer: 0
 };
@@ -58,6 +65,15 @@ const elements = {
   recordFilter: document.querySelector("[data-record-filter]"),
   detailLoading: document.querySelector("[data-detail-loading]"),
   detailContent: document.querySelector("[data-detail-content]"),
+  bronzeExplorer: document.querySelector("[data-bronze-explorer]"),
+  silverExplorer: document.querySelector("[data-silver-explorer]"),
+  silverDatasetSelect: document.querySelector("[data-silver-dataset-select]"),
+  silverSummary: document.querySelector("[data-silver-summary]"),
+  silverWorkSelect: document.querySelector("[data-silver-work-select]"),
+  silverFlagSelect: document.querySelector("[data-silver-flag-select]"),
+  silverPageList: document.querySelector("[data-silver-page-list]"),
+  silverPageCount: document.querySelector("[data-silver-page-count]"),
+  silverPageEmpty: document.querySelector("[data-silver-page-empty]"),
   toast: document.querySelector("[data-toast]")
 };
 
@@ -436,6 +452,297 @@ async function refreshBronzeRuns() {
   }
 }
 
+function setDataLayer(layer) {
+  const showSilver = layer === "silver";
+  elements.bronzeExplorer.hidden = showSilver;
+  elements.silverExplorer.hidden = !showSilver;
+  document.querySelectorAll("[data-data-layer]").forEach((button) => {
+    const active = button.dataset.dataLayer === layer;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-selected", String(active));
+  });
+}
+
+function renderSilverSummary(quality) {
+  const values = [
+    ["Works", quality.work_count.toLocaleString()],
+    ["Pages", quality.page_count.toLocaleString()],
+    ["Usable", quality.usable_page_count.toLocaleString()],
+    [
+      "Review / empty",
+      `${quality.review_page_count.toLocaleString()} / ${quality.empty_page_count.toLocaleString()}`
+    ]
+  ];
+  elements.silverSummary.replaceChildren();
+  values.forEach(([label, value]) => {
+    const wrapper = document.createElement("div");
+    const term = document.createElement("dt");
+    const detail = document.createElement("dd");
+    term.textContent = label;
+    detail.textContent = value;
+    wrapper.append(term, detail);
+    elements.silverSummary.append(wrapper);
+  });
+  setSilverDetailText(
+    "[data-silver-average-words]",
+    quality.average_clean_word_count.toFixed(1)
+  );
+  setSilverDetailText(
+    "[data-silver-languages]",
+    Object.entries(quality.language_counts)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([language, count]) => `${language}: ${count}`)
+      .join(" · ") || "Not recorded"
+  );
+  setSilverDetailText(
+    "[data-silver-processing-failures]",
+    quality.processing_failures.length.toLocaleString()
+  );
+}
+
+function renderSilverWorkOptions() {
+  const previousValue = elements.silverWorkSelect.value;
+  elements.silverWorkSelect.replaceChildren();
+  const allWorks = document.createElement("option");
+  allWorks.value = "";
+  allWorks.textContent = "All works";
+  elements.silverWorkSelect.append(allWorks);
+  state.silverWorks.forEach((work) => {
+    const option = document.createElement("option");
+    option.value = work.work_id;
+    option.textContent = `${work.title} · ${work.work_id}`;
+    elements.silverWorkSelect.append(option);
+  });
+  if (state.silverWorks.some((work) => work.work_id === previousValue)) {
+    elements.silverWorkSelect.value = previousValue;
+  }
+}
+
+function renderSilverPageList() {
+  elements.silverPageList.replaceChildren();
+  elements.silverPageCount.textContent = (
+    state.silverPages.length === state.silverPageTotal
+      ? `${state.silverPages.length} ${state.silverPages.length === 1 ? "page" : "pages"}`
+      : `Showing ${state.silverPages.length} of ${state.silverPageTotal} pages`
+  );
+  elements.silverPageEmpty.hidden = state.silverPages.length !== 0;
+  state.silverPages.forEach((page) => {
+    const button = document.createElement("button");
+    const wrapper = document.createElement("span");
+    const title = document.createElement("strong");
+    const subtitle = document.createElement("small");
+    const metadata = document.createElement("span");
+    const arrow = document.createElement("span");
+    button.type = "button";
+    button.className = (
+      `record-item${page.page_id === state.activeSilverPage?.page_id ? " is-active" : ""}`
+    );
+    button.dataset.silverPageSelect = page.page_id;
+    title.textContent = `Page ${page.sequence_number} · ${page.page_label}`;
+    subtitle.textContent = `Work ${page.work_id}`;
+    metadata.className = "record-meta";
+    metadata.textContent = (
+      `${page.ocr_quality.replaceAll("_", " ")} · ` +
+      `${page.clean_word_count.toLocaleString()} clean words`
+    );
+    arrow.className = "record-arrow";
+    arrow.textContent = "›";
+    wrapper.append(title, subtitle, metadata);
+    button.append(wrapper, arrow);
+    elements.silverPageList.append(button);
+  });
+}
+
+function setSilverDetailText(selector, value) {
+  document.querySelector(selector).textContent = value;
+}
+
+function renderSilverWorkMetadata(workId) {
+  const work = state.silverWorks.find((candidate) => candidate.work_id === workId);
+  if (!work) return;
+  const contributors = work.contributors.map((contributor) => {
+    const roles = contributor.roles.length ? ` (${contributor.roles.join(", ")})` : "";
+    return `${contributor.label}${roles}`;
+  });
+  const production = [...work.production_dates, ...work.production_labels];
+  setSilverDetailText("[data-silver-work-title]", work.title);
+  setSilverDetailText("[data-silver-contributors]", contributors.join(" · ") || "Not recorded");
+  setSilverDetailText("[data-silver-production]", production.join(" · ") || "Not recorded");
+  setSilverDetailText(
+    "[data-silver-work-languages]",
+    work.language_labels.join(" · ") || work.language_ids.join(" · ") || "Not recorded"
+  );
+  setSilverDetailText("[data-silver-subjects]", work.subjects.join(" · ") || "Not recorded");
+  setSilverDetailText("[data-silver-genres]", work.genres.join(" · ") || "Not recorded");
+  const source = document.querySelector("[data-silver-work-source]");
+  source.href = work.source_url;
+  source.textContent = `${work.licence_id || "Unknown licence"} · open source`;
+}
+
+async function renderSilverPageDetail(pageSummary) {
+  const dataset = state.activeSilverDataset;
+  if (!dataset || !pageSummary) return;
+  try {
+    const url = (
+      `${SILVER_DATASETS_ENDPOINT}/${encodeURIComponent(dataset.dataset_id)}` +
+      `/pages/${encodeURIComponent(pageSummary.page_id)}`
+    );
+    const response = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error(`Silver page returned ${response.status}`);
+    const page = await response.json();
+    state.activeSilverPage = page;
+    renderSilverPageList();
+    setSilverDetailText("[data-silver-detail-title]", `Page ${page.sequence_number} · ${page.page_label}`);
+    setSilverDetailText("[data-silver-detail-subtitle]", `Canonical page from work ${page.work_id}`);
+    setSilverDetailText("[data-silver-quality]", page.ocr_quality.replaceAll("_", " "));
+    setSilverDetailText("[data-silver-page-id]", page.page_id);
+    setSilverDetailText("[data-silver-work-id]", page.work_id);
+    setSilverDetailText("[data-silver-sequence]", page.sequence_number.toLocaleString());
+    setSilverDetailText("[data-silver-printed-page]", page.printed_page_number ?? "Not parsed");
+    setSilverDetailText("[data-silver-raw-words]", page.raw_word_count.toLocaleString());
+    setSilverDetailText("[data-silver-clean-words]", page.clean_word_count.toLocaleString());
+    setSilverDetailText("[data-silver-raw]", page.raw_text || "No raw OCR was available.");
+    setSilverDetailText("[data-silver-clean]", page.clean_text || "No cleaned OCR was available.");
+    setSilverDetailText("[data-silver-headers]", page.detected_headers.join(" · ") || "None detected");
+    setSilverDetailText("[data-silver-footers]", page.detected_footers.join(" · ") || "None detected");
+    setSilverDetailText("[data-silver-lineage]", JSON.stringify(page.lineage, null, 2));
+    renderSilverWorkMetadata(page.work_id);
+
+    const quality = document.querySelector("[data-silver-quality]");
+    const qualityStyle = page.ocr_quality === "usable"
+      ? "ready"
+      : page.ocr_quality === "missing" ? "review" : "sample";
+    quality.className = `state-badge state-badge--${qualityStyle}`;
+
+    const flags = document.querySelector("[data-silver-flags]");
+    flags.replaceChildren();
+    const labels = page.quality_flags.length === 0 ? ["no quality flags"] : page.quality_flags;
+    labels.forEach((flag) => {
+      const chip = document.createElement("span");
+      chip.textContent = flag.replaceAll("_", " ");
+      flags.append(chip);
+    });
+
+    const imageFrame = document.querySelector("[data-silver-image-frame]");
+    const image = document.querySelector("[data-silver-image]");
+    imageFrame.hidden = !page.image_url;
+    if (page.image_url) {
+      image.src = page.image_url;
+      image.alt = `Digitized image for ${page.page_label}`;
+    } else {
+      image.removeAttribute("src");
+      image.alt = "";
+    }
+  } catch (error) {
+    setSilverDetailText("[data-silver-clean]", `Could not load this Silver page: ${error.message}`);
+  }
+}
+
+async function refreshSilverPages() {
+  const dataset = state.activeSilverDataset;
+  if (!dataset) return;
+  const query = new URLSearchParams({ limit: "500" });
+  if (elements.silverWorkSelect.value) {
+    query.set("work_id", elements.silverWorkSelect.value);
+  }
+  if (elements.silverFlagSelect.value) {
+    query.set("quality_flag", elements.silverFlagSelect.value);
+  }
+  try {
+    const url = (
+      `${SILVER_DATASETS_ENDPOINT}/${encodeURIComponent(dataset.dataset_id)}` +
+      `/pages?${query}`
+    );
+    const response = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error(`Silver pages returned ${response.status}`);
+    const result = await response.json();
+    state.silverPages = result.items;
+    state.silverPageTotal = result.total;
+    state.activeSilverPage = null;
+    renderSilverPageList();
+    if (state.silverPages[0]) {
+      await renderSilverPageDetail(state.silverPages[0]);
+    } else {
+      setSilverDetailText("[data-silver-detail-title]", "No page matches these filters");
+      setSilverDetailText("[data-silver-detail-subtitle]", "Choose another work or quality flag.");
+    }
+  } catch (error) {
+    state.silverPages = [];
+    state.silverPageTotal = 0;
+    renderSilverPageList();
+    setSilverDetailText("[data-silver-clean]", `Could not load Silver pages: ${error.message}`);
+  }
+}
+
+async function selectSilverDataset(datasetId) {
+  state.activeSilverDataset = state.silverDatasets.find(
+    (dataset) => dataset.dataset_id === datasetId
+  ) || null;
+  state.silverWorks = [];
+  state.silverPages = [];
+  state.silverPageTotal = 0;
+  state.activeSilverPage = null;
+  if (!state.activeSilverDataset) return;
+  const baseUrl = (
+    `${SILVER_DATASETS_ENDPOINT}/${encodeURIComponent(state.activeSilverDataset.dataset_id)}`
+  );
+  try {
+    const [worksResponse, qualityResponse] = await Promise.all([
+      fetch(`${baseUrl}/works`, { headers: { Accept: "application/json" } }),
+      fetch(`${baseUrl}/quality`, { headers: { Accept: "application/json" } })
+    ]);
+    if (!worksResponse.ok || !qualityResponse.ok) {
+      throw new Error("Silver dataset details are unavailable");
+    }
+    state.silverWorks = await worksResponse.json();
+    renderSilverWorkOptions();
+    renderSilverSummary(await qualityResponse.json());
+    await refreshSilverPages();
+  } catch (error) {
+    setSilverDetailText("[data-silver-clean]", error.message);
+  }
+}
+
+async function refreshSilverDatasets() {
+  elements.silverDatasetSelect.disabled = true;
+  try {
+    const response = await fetch(SILVER_DATASETS_ENDPOINT, {
+      headers: { Accept: "application/json" }
+    });
+    if (!response.ok) throw new Error(`Silver datasets returned ${response.status}`);
+    state.silverDatasets = await response.json();
+    elements.silverDatasetSelect.replaceChildren();
+    if (state.silverDatasets.length === 0) {
+      const option = document.createElement("option");
+      option.textContent = "No Silver datasets available";
+      elements.silverDatasetSelect.append(option);
+      setSilverDetailText(
+        "[data-silver-clean]",
+        "Run the Silver build command against a complete Bronze run."
+      );
+      return;
+    }
+    state.silverDatasets.forEach((dataset) => {
+      const option = document.createElement("option");
+      option.value = dataset.dataset_id;
+      option.textContent = (
+        `${formatTime(dataset.generated_at)} · ${dataset.work_count} works · ` +
+        dataset.dataset_id.slice(0, 12)
+      );
+      elements.silverDatasetSelect.append(option);
+    });
+    await selectSilverDataset(state.silverDatasets[0].dataset_id);
+  } catch (error) {
+    elements.silverDatasetSelect.replaceChildren();
+    const option = document.createElement("option");
+    option.textContent = "Silver API unavailable";
+    elements.silverDatasetSelect.append(option);
+    setSilverDetailText("[data-silver-clean]", error.message);
+  } finally {
+    elements.silverDatasetSelect.disabled = false;
+  }
+}
+
 function resetResourceSearch() {
   elements.recordSearch.value = "";
   elements.recordFilter.value = "all";
@@ -457,6 +764,9 @@ function handleChatSubmit(event) {
 
 document.querySelectorAll("[data-view]").forEach((button) => {
   button.addEventListener("click", () => setActiveView(button.dataset.view));
+});
+document.querySelectorAll("[data-data-layer]").forEach((button) => {
+  button.addEventListener("click", () => setDataLayer(button.dataset.dataLayer));
 });
 elements.sidebarOpenButton.addEventListener("click", openSidebar);
 document.querySelectorAll("[data-sidebar-close]").forEach((button) => {
@@ -483,6 +793,18 @@ elements.bronzeRunSelect.addEventListener("change", () => {
 elements.recordSearch.addEventListener("input", renderResourceList);
 elements.recordFilter.addEventListener("change", renderResourceList);
 document.querySelector("[data-reset-search]").addEventListener("click", resetResourceSearch);
+elements.silverDatasetSelect.addEventListener("change", () => {
+  selectSilverDataset(elements.silverDatasetSelect.value);
+});
+elements.silverWorkSelect.addEventListener("change", refreshSilverPages);
+elements.silverFlagSelect.addEventListener("change", refreshSilverPages);
+elements.silverPageList.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-silver-page-select]");
+  const page = state.silverPages.find(
+    (candidate) => candidate.page_id === button?.dataset.silverPageSelect
+  );
+  if (page) renderSilverPageDetail(page);
+});
 elements.recordList.addEventListener("click", (event) => {
   const button = event.target.closest("[data-resource-id]");
   const resource = state.activeBronzeRun?.resources.find(
@@ -509,4 +831,5 @@ syncSidebarAccessibility();
 refreshHealth();
 refreshIngestionStatus();
 refreshBronzeRuns();
+refreshSilverDatasets();
 window.setInterval(refreshIngestionStatus, INGESTION_POLL_INTERVAL_MS);

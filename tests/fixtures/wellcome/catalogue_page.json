@@ -23,6 +23,58 @@
           "label": "English"
         }
       ],
+      "alternativeTitles": [
+        "Practical observations on cholera"
+      ],
+      "contributors": [
+        {
+          "agent": {
+            "id": "contributor-1",
+            "label": "Patterson, Charles"
+          },
+          "roles": [
+            {
+              "label": "author"
+            }
+          ],
+          "primary": true
+        }
+      ],
+      "production": [
+        {
+          "label": "Dublin : Hodges and Smith, 1848.",
+          "places": [
+            {
+              "label": "Dublin"
+            }
+          ],
+          "dates": [
+            {
+              "label": "1848"
+            }
+          ],
+          "agents": [
+            {
+              "label": "Hodges and Smith"
+            }
+          ],
+          "function": {
+            "label": "Publication"
+          }
+        }
+      ],
+      "subjects": [
+        {
+          "id": "subject-1",
+          "label": "Cholera"
+        }
+      ],
+      "genres": [
+        {
+          "id": "genre-1",
+          "label": "Electronic books"
+        }
+      ],
       "items": [
         {
           "locations": [

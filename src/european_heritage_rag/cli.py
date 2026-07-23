@@ -11,6 +11,14 @@ from european_heritage_rag.pipeline.bronze_store import (
     BronzeManifestIdentityError,
 )
 from european_heritage_rag.pipeline.bronze_validation import validate_bronze_run
+from european_heritage_rag.pipeline.silver import (
+    SilverTransformError,
+    transform_bronze_run,
+)
+from european_heritage_rag.pipeline.silver_store import (
+    SilverFilesystemStore,
+    validate_silver_dataset,
+)
 from european_heritage_rag.sources.wellcome.ingestion import run_wellcome_ingestion
 
 _DISTRIBUTION_NAME = "european-heritage-rag"
@@ -28,8 +36,13 @@ bronze_app = typer.Typer(
     help="Inspect and validate immutable raw source runs.",
     no_args_is_help=True,
 )
+silver_app = typer.Typer(
+    help="Build, inspect, and validate canonical Silver datasets.",
+    no_args_is_help=True,
+)
 app.add_typer(ingest_app, name="ingest")
 app.add_typer(bronze_app, name="bronze")
+app.add_typer(silver_app, name="silver")
 
 
 @app.callback()
@@ -228,6 +241,136 @@ def validate_bronze(
                 err=True,
             )
 
+    if invalid:
+        raise typer.Exit(code=1)
+
+
+@silver_app.command("build")
+def build_silver(
+    bronze_run_id: Annotated[
+        str,
+        typer.Option(
+            "--bronze-run-id",
+            help="Completed Bronze run to transform entirely offline.",
+        ),
+    ],
+) -> None:
+    """Build or reuse one deterministic Silver dataset."""
+
+    settings = get_settings()
+    bronze_store = BronzeFilesystemStore(settings.bronze_data_directory)
+    bronze_manifest = bronze_store.find_manifest(bronze_run_id)
+    if bronze_manifest is None:
+        typer.echo(f"Bronze run not found: {bronze_run_id}", err=True)
+        raise typer.Exit(code=1)
+    try:
+        transformed = transform_bronze_run(bronze_store, bronze_manifest)
+        published = SilverFilesystemStore(settings.silver_data_directory).publish(
+            transformed
+        )
+    except (OSError, ValueError, SilverTransformError) as error:
+        typer.echo(f"Silver build failed: {error}", err=True)
+        raise typer.Exit(code=1) from error
+
+    action = "created" if published.created else "reused"
+    typer.echo(f"Dataset: {published.manifest.dataset_id}")
+    typer.echo(f"Status: {action}")
+    typer.echo(f"Bronze run: {published.manifest.bronze_run_id}")
+    typer.echo(
+        f"Works: {published.manifest.work_count}; "
+        f"pages: {published.manifest.page_count}"
+    )
+
+
+@silver_app.command("inspect")
+def inspect_silver(
+    dataset_id: Annotated[
+        str | None,
+        typer.Option(
+            "--dataset-id",
+            help="Show one dataset in detail; omit to list complete datasets.",
+        ),
+    ] = None,
+) -> None:
+    """Show complete Silver datasets and their quality summary."""
+
+    store = SilverFilesystemStore(get_settings().silver_data_directory)
+    if dataset_id is None:
+        manifests = store.list_manifests()
+        if not manifests:
+            typer.echo("No Silver datasets found.")
+            return
+        for listed_manifest in manifests:
+            typer.echo(
+                f"{listed_manifest.dataset_id} | "
+                f"Bronze {listed_manifest.bronze_run_id} | "
+                f"{listed_manifest.work_count} works | "
+                f"{listed_manifest.page_count} pages"
+            )
+        return
+
+    manifest = store.find_manifest(dataset_id)
+    if manifest is None:
+        typer.echo(f"Silver dataset not found: {dataset_id}", err=True)
+        raise typer.Exit(code=1)
+    quality = store.read_quality(dataset_id)
+    typer.echo(f"Dataset: {manifest.dataset_id}")
+    typer.echo(f"Bronze run: {manifest.bronze_run_id}")
+    typer.echo(f"Works: {manifest.work_count}; pages: {manifest.page_count}")
+    typer.echo(
+        f"Empty OCR: {quality.empty_page_count}; "
+        f"needs review: {quality.review_page_count}; "
+        f"usable: {quality.usable_page_count}"
+    )
+    for record in manifest.files:
+        typer.echo(
+            f"- {record.name} | {record.byte_length} bytes | {record.content_sha256}"
+        )
+
+
+@silver_app.command("validate")
+def validate_silver(
+    dataset_id: Annotated[
+        str | None,
+        typer.Option(
+            "--dataset-id",
+            help="Validate one dataset; omit to validate all complete datasets.",
+        ),
+    ] = None,
+) -> None:
+    """Verify Silver files, hashes, schemas, rows, and relationships."""
+
+    store = SilverFilesystemStore(get_settings().silver_data_directory)
+    manifests = (
+        store.list_manifests()
+        if dataset_id is None
+        else tuple(
+            manifest
+            for manifest in (store.find_manifest(dataset_id),)
+            if manifest is not None
+        )
+    )
+    if dataset_id is not None and not manifests:
+        typer.echo(f"Silver dataset not found: {dataset_id}", err=True)
+        raise typer.Exit(code=1)
+    if not manifests:
+        typer.echo("No Silver datasets found.")
+        return
+
+    invalid = False
+    for manifest in manifests:
+        report = validate_silver_dataset(store, manifest)
+        typer.echo(
+            f"{manifest.dataset_id}: "
+            f"{'valid' if report.is_valid else 'invalid'} "
+            f"({manifest.work_count} works, {manifest.page_count} pages)"
+        )
+        for issue in report.issues:
+            invalid = True
+            typer.echo(
+                f"- {issue.code} | {issue.filename or 'dataset'} | {issue.message}",
+                err=True,
+            )
     if invalid:
         raise typer.Exit(code=1)
 

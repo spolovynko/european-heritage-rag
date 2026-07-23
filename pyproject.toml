@@ -10,6 +10,8 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.139.2",
     "httpx2>=2.7.0",
+    "polars>=1.43.0",
+    "pyarrow>=25.0.0",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.2",
     "structlog>=26.1.0",

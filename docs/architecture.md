@@ -2,10 +2,11 @@
 
 ## Purpose of this document
 
-This is the Phase 1 architecture contract for HeritageRAG. It describes the
-boundaries later phases must preserve; no service shown here has been
-implemented yet. Component and technology choices will be introduced only when
-their phase needs them.
+This began as the Phase 1 architecture contract for HeritageRAG. It describes
+the boundaries later phases must preserve. The repository is now implemented
+through the Bronze and Silver data layers; Gold chunking, indexing, retrieval,
+generation, and citation validation remain future work. The exact current
+state is recorded in [Project status](project-status.md).
 
 ## Baseline request flow
 
@@ -75,9 +76,10 @@ The citation validator rejects an unknown chunk ID, a citation not present in
 the current context, or missing work/page provenance. The complete semantic
 rules are defined in [Scope and evidence contract](scope-and-evidence-contract.md).
 
-## Planned data and application flow
+## Progressive data and application flow
 
-Later phases will implement this target progressively:
+The project implements this target progressively. Bronze and Silver are
+complete; downstream boxes remain planned:
 
 ```mermaid
 flowchart LR
@@ -155,4 +157,3 @@ chunk size, reranker, language model, prompt, or abstention score threshold.
 Those choices require real data and measured comparisons. The target technology
 stack in the learning guide is directional, not evidence that these components
 already exist.
-

@@ -4,7 +4,7 @@ from datetime import UTC, date
 from enum import StrEnum
 from hashlib import sha256
 from pathlib import PurePosixPath
-from typing import Literal, Self
+from typing import Final, Literal, Self
 
 from pydantic import (
     AnyHttpUrl,
@@ -16,6 +16,14 @@ from pydantic import (
 )
 
 _SAFE_IDENTIFIER_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]*$"
+type WellcomeInclude = Literal[
+    "items,languages",
+    "items,languages,contributors,production,subjects,genres",
+]
+LEGACY_WELLCOME_INCLUDE: Final[WellcomeInclude] = "items,languages"
+SILVER_READY_WELLCOME_INCLUDE: Final[WellcomeInclude] = (
+    "items,languages,contributors,production,subjects,genres"
+)
 
 
 class BronzeModel(BaseModel):
@@ -156,7 +164,7 @@ class WellcomeBronzeParameters(BronzeModel):
     availability: Literal["online"] = "online"
     licence: Literal["pdm"] = "pdm"
     location_type: Literal["iiif-presentation"] = "iiif-presentation"
-    include: Literal["items,languages"] = "items,languages"
+    include: WellcomeInclude = SILVER_READY_WELLCOME_INCLUDE
 
 
 class BronzeResourceRecord(BronzeModel):

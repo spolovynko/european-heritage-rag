@@ -74,6 +74,7 @@ class AppSettings(BaseSettings):
 
     ingestion_state_directory: Path = Path("var/ingestion")
     bronze_data_directory: Path = Path("data/bronze")
+    silver_data_directory: Path = Path("data/silver")
 
     model_config = SettingsConfigDict(
         env_file=".env",

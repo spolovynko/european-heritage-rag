@@ -18,6 +18,7 @@ from tenacity import (
 )
 
 from european_heritage_rag.core.config import AppSettings
+from european_heritage_rag.pipeline.bronze import SILVER_READY_WELLCOME_INCLUDE
 from european_heritage_rag.sources.wellcome.models import (
     CatalogueWork,
     CatalogueWorksPage,
@@ -243,7 +244,7 @@ class WellcomeClient:
             "items.locations.license": "pdm",
             "items.locations.locationType": "iiif-presentation",
             "languages": language,
-            "include": "items,languages",
+            "include": SILVER_READY_WELLCOME_INCLUDE,
             "pageSize": limit,
         }
         if query:

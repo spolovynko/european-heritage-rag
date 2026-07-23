@@ -30,7 +30,7 @@ def test_fetch_catalogue_page_uses_settings_and_parses_response(
         "https://api.wellcomecollection.org/catalogue/v2/works",
         params={
             "pageSize": "1",
-            "include": "items,languages",
+            "include": "items,languages,contributors,production,subjects,genres",
         },
     ).respond(
         content=(_FIXTURE_DIRECTORY / "catalogue_page.json").read_text(encoding="utf-8")
@@ -49,7 +49,7 @@ def test_fetch_catalogue_page_uses_settings_and_parses_response(
         page = client.fetch_catalogue_page(
             params={
                 "pageSize": 1,
-                "include": "items,languages",
+                "include": "items,languages,contributors,production,subjects,genres",
             }
         )
 
@@ -78,7 +78,7 @@ def test_transient_status_is_retried(
         "https://api.wellcomecollection.org/catalogue/v2/works",
         params={
             "pageSize": "1",
-            "include": "items,languages",
+            "include": "items,languages,contributors,production,subjects,genres",
         },
     ).mock(
         side_effect=[
@@ -102,7 +102,7 @@ def test_transient_status_is_retried(
         page = client.fetch_catalogue_page(
             params={
                 "pageSize": 1,
-                "include": "items,languages",
+                "include": "items,languages,contributors,production,subjects,genres",
             }
         )
 
@@ -133,7 +133,7 @@ def test_retry_after_header_selects_wait(
         "https://api.wellcomecollection.org/catalogue/v2/works",
         params={
             "pageSize": "1",
-            "include": "items,languages",
+            "include": "items,languages,contributors,production,subjects,genres",
         },
     ).mock(
         side_effect=[
@@ -160,7 +160,7 @@ def test_retry_after_header_selects_wait(
         page = client.fetch_catalogue_page(
             params={
                 "pageSize": 1,
-                "include": "items,languages",
+                "include": "items,languages,contributors,production,subjects,genres",
             }
         )
 
@@ -178,7 +178,7 @@ def test_permanent_status_is_not_retried(
         "https://api.wellcomecollection.org/catalogue/v2/works",
         params={
             "pageSize": "1",
-            "include": "items,languages",
+            "include": "items,languages,contributors,production,subjects,genres",
         },
     ).respond(status_code=400)
 
@@ -193,7 +193,9 @@ def test_permanent_status_is_not_retried(
             client.fetch_catalogue_page(
                 params={
                     "pageSize": 1,
-                    "include": "items,languages",
+                    "include": (
+                        "items,languages,contributors,production,subjects,genres"
+                    ),
                 }
             )
 
@@ -234,7 +236,7 @@ def test_discover_works_follows_pages_and_stops_at_limit(
             "items.locations.license": "pdm",
             "items.locations.locationType": "iiif-presentation",
             "languages": "eng",
-            "include": "items,languages",
+            "include": "items,languages,contributors,production,subjects,genres",
             "pageSize": "2",
             "query": "cholera",
         },
@@ -275,7 +277,7 @@ def test_discover_works_rejects_non_public_domain_location(
             "items.locations.license": "pdm",
             "items.locations.locationType": "iiif-presentation",
             "languages": "eng",
-            "include": "items,languages",
+            "include": "items,languages,contributors,production,subjects,genres",
             "pageSize": "1",
         },
     ).respond(json=page)
@@ -309,7 +311,7 @@ def test_discovery_exposes_lossless_selected_work_json(
             "items.locations.license": "pdm",
             "items.locations.locationType": "iiif-presentation",
             "languages": "eng",
-            "include": "items,languages",
+            "include": "items,languages,contributors,production,subjects,genres",
             "pageSize": "1",
         },
     ).respond(json=page)

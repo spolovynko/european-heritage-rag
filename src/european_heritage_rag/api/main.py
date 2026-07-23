@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from european_heritage_rag.api.bronze import router as bronze_router
 from european_heritage_rag.api.contracts import HealthResponse, ReadinessResponse
+from european_heritage_rag.api.silver import router as silver_router
 from european_heritage_rag.core.config import AppSettings, get_settings
 from european_heritage_rag.core.logging import configure_logging, get_logger
 from european_heritage_rag.sources.wellcome.ingestion import (
@@ -115,6 +116,7 @@ def create_app(
     )
 
     application.include_router(bronze_router)
+    application.include_router(silver_router)
 
     if frontend_directory.is_dir():
         application.mount(

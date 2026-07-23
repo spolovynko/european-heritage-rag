@@ -23,8 +23,14 @@ test completed 5 works and traversed 246 canvases, 14 of which had no OCR.
 Phase 5 added immutable Bronze storage, provenance manifests, content hashes,
 atomic writes, offline validation, idempotent resume, CLI/API inspection, and a
 live browser explorer. The Phase 5 acceptance run stored 310 raw resources for
-5 works and validated all of them offline. No Silver, searchable, or indexed
-corpus exists yet, so the application is not ready for end-user use.
+5 works and validated all of them offline. Phase 6 added strict canonical work
+and page models, conservative OCR cleaning, exact row-level Bronze lineage,
+deterministic compressed Parquet datasets, quality reports, offline Silver
+validation, CLI/API operations, and a page inspector. The largest verified run
+contains 20 works and 1,670 pages: 1,454 usable, 129 needing review, and 87 with
+no OCR. No Gold chunks, searchable index, or answer generation exists yet, so
+the application is still a diagnostic data product rather than an end-user
+research assistant.
 
 ## Run the application
 
@@ -56,6 +62,7 @@ Open <http://localhost:8000/>. The operational endpoints are available at:
 - <http://localhost:8000/health/ready>
 - <http://localhost:8000/ingestion/status>
 - <http://localhost:8000/bronze/runs>
+- <http://localhost:8000/silver/datasets>
 - <http://localhost:8000/docs>
 
 Stop the local server with `Ctrl+C`.
@@ -132,13 +139,59 @@ With Compose running, use the same command inside the API container:
 docker compose exec api european-heritage-rag ingest wellcome --limit 5 --query cholera --dry-run
 ```
 
-Compose mounts named volumes at `/app/var/ingestion` and `/app/data/bronze`,
-preserving control state and the raw corpus when the API container is replaced.
-Run a non-dry ingestion inside the container to populate its Bronze volume:
+Compose mounts named volumes at `/app/var/ingestion`, `/app/data/bronze`, and
+`/app/data/silver`, preserving control state, raw evidence, and derived
+canonical datasets when the API container is replaced. Run a non-dry ingestion
+inside the container to populate its Bronze volume:
 
 ```shell
 docker compose exec api european-heritage-rag ingest wellcome --limit 5 --query cholera
 ```
+
+## Build the Silver canonical corpus
+
+Silver is an offline transformation of one complete Bronze run. It does not
+call Wellcome:
+
+```shell
+uv run european-heritage-rag silver build --bronze-run-id <run-id>
+```
+
+The build validates Bronze first, creates one canonical work per completed
+work and one canonical page per IIIF canvas, preserves raw OCR, writes a
+separate conservative clean OCR view, attaches exact Bronze lineage, and
+publishes:
+
+```text
+data/silver/wellcome/dataset_id=<sha256>/
+├── works.parquet
+├── pages.parquet
+├── quality-report.json
+├── quality-report.md
+└── silver-manifest.json
+```
+
+Inspect or validate every complete Silver dataset:
+
+```shell
+uv run european-heritage-rag silver inspect
+uv run european-heritage-rag silver validate
+```
+
+Inspect or validate one exact dataset:
+
+```shell
+uv run european-heritage-rag silver inspect --dataset-id <dataset-id>
+uv run european-heritage-rag silver validate --dataset-id <dataset-id>
+```
+
+An unchanged repeat build reports `Status: reused`. Dataset identity includes
+the Bronze inventory plus schema, cleaning, header/footer, and quality-rule
+versions, so changed evidence or changed rules produce another identity.
+
+Open the **Data** workspace and choose **Silver · canonical records** to inspect
+aggregate quality, work metadata, page images, raw versus clean OCR, quality
+flags, and exact Bronze lineage.
 
 ### Generated frontend directories
 
@@ -236,8 +289,13 @@ Source traversal is sequential and English-only and resumes at work rather than
 canvas granularity. Bronze is local-filesystem, single-writer, uncompressed raw
 JSON; the complete run manifest is rewritten atomically after each event.
 Catalogue works preserve all decoded source fields but not the original
-catalogue page's byte formatting. OCR is intentionally not cleaned until
-Silver.
+catalogue page's byte formatting. Silver cleaning is intentionally conservative
+and its `usable`/`needs_review` bands are heuristics rather than measured OCR
+accuracy. Repeated header/footer detection is high precision and found no
+confirmed boundaries in the 20-work acceptance sample. The local Silver API
+loads complete Parquet files, and the browser shows at most 500 page summaries
+per filter. Printed page parsing is decimal-only. Gold chunks, retrieval, and
+working answers remain unimplemented.
 
 ## Documentation
 
@@ -251,8 +309,10 @@ Silver.
 - [ADR-0003: Browser-native UI foundation and same-origin FastAPI delivery](docs/adr/0003-browser-native-ui-and-fastapi-delivery.md)
 - [ADR-0004: Wellcome API and IIIF ingestion strategy](docs/adr/0004-wellcome-api-and-iiif-ingestion-strategy.md)
 - [ADR-0005: Append-only Bronze storage and idempotent ingestion](docs/adr/0005-append-only-bronze-storage-and-idempotent-ingestion.md)
+- [ADR-0006: Canonical work/page schemas and conservative OCR cleaning](docs/adr/0006-canonical-work-page-schemas-and-conservative-ocr-cleaning.md)
 - [Building guides](docs/building_guides/README.md)
 - [Phase 3 implementation guide](docs/building_guides/phase-03-ui-foundation-and-progress-dashboard.md)
 - [Phase 4 implementation guide](docs/building_guides/phase-04-wellcome-discovery-and-ingestion-client.md)
 - [Phase 5 implementation guide](docs/building_guides/phase-05-bronze-data-layer.md)
+- [Phase 6 implementation guide](docs/building_guides/phase-06-silver-normalization-and-ocr-cleaning.md)
 - [Development and learning agreement](docs/learning-guide-agreement.md)

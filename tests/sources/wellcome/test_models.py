@@ -34,6 +34,10 @@ def test_catalogue_fixture_contains_eligible_work() -> None:
     assert work.id == "xpxuaxuf"
     assert work.work_type.id == "a"
     assert tuple(language.id for language in work.languages) == ("eng",)
+    assert work.contributors[0].agent.label == "Patterson, Charles"
+    assert work.production[0].dates[0].label == "1848"
+    assert work.subjects[0].label == "Cholera"
+    assert work.genres[0].label == "Electronic books"
     assert location.location_type.id == "iiif-presentation"
     assert location.licence is not None
     assert location.licence.id == "pdm"
@@ -55,6 +59,10 @@ def test_manifest_fixture_preserves_canvas_order() -> None:
     )
     assert len(canvases[0].other_content) == 1
     assert canvases[1].other_content == ()
+    assert canvases[0].images[0].resource.service is not None
+    assert str(canvases[0].images[0].resource.service.id) == (
+        "https://iiif.wellcomecollection.org/image/b28041136_0001.jp2"
+    )
 
 
 def test_ocr_fixture_preserves_line_order() -> None:
@@ -81,7 +89,7 @@ def test_unneeded_source_fields_are_ignored() -> None:
 
     page = CatalogueWorksPage.model_validate_json(read_fixture("catalogue_page.json"))
 
-    assert page.results[0].work_type.model_dump() == {"id": "a"}
+    assert page.results[0].work_type.id == "a"
 
 
 def test_physical_catalogue_location_may_omit_url() -> None:

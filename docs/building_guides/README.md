@@ -17,6 +17,7 @@ Each documentation area has one job:
 - [Phase 3: UI foundation and progress dashboard](phase-03-ui-foundation-and-progress-dashboard.md)
 - [Phase 4: Wellcome discovery and ingestion client](phase-04-wellcome-discovery-and-ingestion-client.md)
 - [Phase 5: Bronze data layer](phase-05-bronze-data-layer.md)
+- [Phase 6: Silver normalization and OCR cleaning](phase-06-silver-normalization-and-ocr-cleaning.md)
 
 ## Update convention
 

@@ -11,6 +11,18 @@
           "@id": "https://iiif.wellcomecollection.org/presentation/v2/b28041136/canvases/b28041136_0001.jp2",
           "@type": "sc:Canvas",
           "label": "Front Cover",
+          "width": 1200,
+          "height": 1800,
+          "images": [
+            {
+              "resource": {
+                "@id": "https://iiif.wellcomecollection.org/image/b28041136_0001.jp2/full/800,/0/default.jpg",
+                "service": {
+                  "@id": "https://iiif.wellcomecollection.org/image/b28041136_0001.jp2"
+                }
+              }
+            }
+          ],
           "otherContent": [
             {
               "@id": "https://iiif.wellcomecollection.org/annotations/v2/b28041136/b28041136_0001.jp2/line",
@@ -21,7 +33,14 @@
         {
           "@id": "https://iiif.wellcomecollection.org/presentation/v2/b28041136/canvases/b28041136_0002.jp2",
           "@type": "sc:Canvas",
-          "label": "Blank page"
+          "label": "Blank page",
+          "images": [
+            {
+              "resource": {
+                "@id": "https://iiif.wellcomecollection.org/image/b28041136_0002.jp2/full/800,/0/default.jpg"
+              }
+            }
+          ]
         }
       ]
     }

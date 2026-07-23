@@ -2846,6 +2846,38 @@ a:focus-visible {
 }
 
 /* Data explorer */
+.data-layer-tabs {
+  display: inline-flex;
+  gap: 5px;
+  margin-bottom: 15px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgb(0 0 0 / 18%);
+}
+
+.data-layer-tab {
+  min-height: 34px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 8px;
+  color: #85869a;
+  background: transparent;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.data-layer-tab:hover {
+  color: #fff;
+}
+
+.data-layer-tab.is-active {
+  color: #08080c;
+  background: linear-gradient(135deg, var(--lime), var(--cyan));
+  box-shadow: 0 0 16px rgb(49 217 255 / 13%);
+}
+
 .bronze-run-panel,
 .record-browser,
 .record-detail {
@@ -3013,6 +3045,175 @@ a:focus-visible {
   box-shadow: 0 0 10px rgb(199 255 74 / 45%);
 }
 
+.silver-controls label {
+  margin: 0;
+}
+
+.silver-controls select {
+  width: 100%;
+}
+
+.silver-quality-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: -3px 0 15px;
+}
+
+.silver-quality-strip > div {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 2%);
+}
+
+.silver-quality-strip span,
+.silver-quality-strip strong {
+  display: block;
+}
+
+.silver-quality-strip span {
+  margin-bottom: 5px;
+  color: #747588;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.silver-quality-strip strong {
+  overflow: hidden;
+  color: #e7e7ed;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.silver-page-visual {
+  max-height: 350px;
+  margin: 18px 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #09090e;
+  text-align: center;
+}
+
+.silver-page-visual img {
+  display: block;
+  width: 100%;
+  max-height: 350px;
+  object-fit: contain;
+}
+
+.quality-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 18px 0 0;
+}
+
+.quality-chip-list span {
+  padding: 5px 8px;
+  border: 1px solid rgb(155 109 255 / 20%);
+  border-radius: 999px;
+  color: #bfaaff;
+  background: rgb(155 109 255 / 8%);
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.silver-work-metadata {
+  margin-bottom: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgb(49 217 255 / 3%);
+}
+
+.silver-work-metadata h3 {
+  margin: 0;
+  color: #e7e7ed;
+  font-size: 16px;
+}
+
+.silver-work-metadata .metadata-grid {
+  margin-bottom: 0;
+}
+
+.silver-text-grid,
+.silver-detection-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.silver-text-grid .ocr-panel {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.silver-text-grid .ocr-toolbar {
+  padding: 14px 16px;
+}
+
+.silver-text-grid pre,
+.silver-lineage pre {
+  max-height: 390px;
+  margin: 0;
+  padding: 16px;
+  overflow: auto;
+  color: #bfc0cb;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 9px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.silver-detection-grid {
+  margin-top: 12px;
+}
+
+.silver-detection-grid > div {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 2%);
+}
+
+.silver-detection-grid strong {
+  color: #e7e7ed;
+  font-size: 9px;
+}
+
+.silver-detection-grid p {
+  margin: 6px 0 0;
+  color: #85869a;
+  font-size: 9px;
+}
+
+.silver-lineage {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgb(0 0 0 / 18%);
+}
+
+.silver-lineage summary {
+  padding: 13px 15px;
+  color: #bfc0cb;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.silver-lineage pre {
+  border-top: 1px solid var(--line);
+}
+
 /* Future diagnostics */
 .future-card {
   background: linear-gradient(145deg, rgb(255 255 255 / 5%), rgb(255 255 255 / 2%));
@@ -3131,6 +3332,10 @@ a:focus-visible {
   .activity-panel {
     min-height: auto;
   }
+
+  .silver-text-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 820px) {
@@ -3159,6 +3364,14 @@ a:focus-visible {
 
   .bronze-run-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .silver-detection-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .silver-quality-strip {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -3237,5 +3450,9 @@ a:focus-visible {
 
   .record-detail {
     padding: 16px;
+  }
+
+  .data-layer-tabs {
+    display: grid;
   }
 }

@@ -36,7 +36,8 @@ class WellcomeSourceModel(BaseModel):
 class IdentifierReference(WellcomeSourceModel):
     """Identifier from a Wellcome catalogue controlled value."""
 
-    id: str = Field(min_length=1)
+    id: str | None = Field(default=None, min_length=1)
+    label: str | None = Field(default=None, min_length=1)
 
 
 class LicenceReference(IdentifierReference):
@@ -59,6 +60,51 @@ class CatalogueItem(WellcomeSourceModel):
     locations: tuple[DigitalLocation, ...] = ()
 
 
+class ContributorRole(WellcomeSourceModel):
+    """Human-readable role attached to a catalogue contributor."""
+
+    label: str = Field(min_length=1)
+
+
+class ContributorAgent(WellcomeSourceModel):
+    """Person or organisation credited on a catalogue work."""
+
+    id: str | None = Field(default=None, min_length=1)
+    label: str = Field(min_length=1)
+
+
+class CatalogueContributor(WellcomeSourceModel):
+    """Contributor agent, roles, and primary-credit marker."""
+
+    agent: ContributorAgent
+    roles: tuple[ContributorRole, ...] = ()
+    primary: bool = False
+
+
+class ProductionValue(WellcomeSourceModel):
+    """Labelled place, date, agent, or function in a production event."""
+
+    id: str | None = Field(default=None, min_length=1)
+    label: str = Field(min_length=1)
+
+
+class ProductionEvent(WellcomeSourceModel):
+    """Publication or creation statement for a catalogue work."""
+
+    label: str = Field(min_length=1)
+    places: tuple[ProductionValue, ...] = ()
+    agents: tuple[ProductionValue, ...] = ()
+    dates: tuple[ProductionValue, ...] = ()
+    function: ProductionValue | None = None
+
+
+class LabelledConcept(WellcomeSourceModel):
+    """Subject or genre value exposed by the catalogue API."""
+
+    id: str | None = Field(default=None, min_length=1)
+    label: str = Field(min_length=1)
+
+
 class CatalogueWork(WellcomeSourceModel):
     """Narrow work record returned by Wellcome discovery."""
 
@@ -68,6 +114,14 @@ class CatalogueWork(WellcomeSourceModel):
     availabilities: tuple[IdentifierReference, ...] = ()
     languages: tuple[IdentifierReference, ...] = ()
     items: tuple[CatalogueItem, ...] = ()
+    alternative_titles: tuple[str, ...] = Field(
+        default=(),
+        alias="alternativeTitles",
+    )
+    contributors: tuple[CatalogueContributor, ...] = ()
+    production: tuple[ProductionEvent, ...] = ()
+    subjects: tuple[LabelledConcept, ...] = ()
+    genres: tuple[LabelledConcept, ...] = ()
 
 
 class CatalogueWorksPage(WellcomeSourceModel):
@@ -88,6 +142,25 @@ class AnnotationListReference(WellcomeSourceModel):
     resource_type: Literal["sc:AnnotationList"] = Field(alias="@type")
 
 
+class IiifImageService(WellcomeSourceModel):
+    """IIIF Image API service used to derive page image URLs."""
+
+    id: AnyHttpUrl = Field(alias="@id")
+
+
+class IiifImageResource(WellcomeSourceModel):
+    """Image resource painted onto a canvas."""
+
+    id: AnyHttpUrl = Field(alias="@id")
+    service: IiifImageService | None = None
+
+
+class IiifImageAnnotation(WellcomeSourceModel):
+    """Image annotation attached to a canvas."""
+
+    resource: IiifImageResource
+
+
 class IiifCanvas(WellcomeSourceModel):
     """One page-like canvas in a IIIF Presentation 2 manifest."""
 
@@ -98,6 +171,9 @@ class IiifCanvas(WellcomeSourceModel):
         default=(),
         alias="otherContent",
     )
+    images: tuple[IiifImageAnnotation, ...] = ()
+    width: int | None = Field(default=None, gt=0)
+    height: int | None = Field(default=None, gt=0)
 
 
 class IiifSequence(WellcomeSourceModel):

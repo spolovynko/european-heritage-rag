@@ -1,15 +1,15 @@
 # Building guides
 
-This folder records what was actually built in each development phase and how
-the resulting system works. It is a living implementation guide, not a plan.
+This folder explains what we actually built in each phase, why we built it,
+and how it works. These files describe finished work. They are not plans.
 
-The documentation areas have different responsibilities:
+Each documentation area has one job:
 
-- `docs/building_phases/` defines the planned scope and exit criteria for each
-  phase.
-- `docs/building_guides/` reviews the implementation produced by each phase.
-- `docs/adr/` records durable architecture decisions and their alternatives.
-- `docs/project-status.md` records the current project state and next handoff.
+- `docs/building_phases/` says what we plan to build and how we decide that a
+  phase is complete.
+- `docs/building_guides/` explains what we actually built.
+- `docs/adr/` records important technical decisions and alternatives.
+- `docs/project-status.md` says where the project is now and what comes next.
 
 ## Guides
 
@@ -21,25 +21,27 @@ The documentation areas have different responsibilities:
 
 At the end of each phase:
 
-1. Review the committed implementation rather than copying the phase plan.
-2. Record the modules, frameworks, runtime flow, and operational commands.
-3. Explain how the important code works and why its boundaries exist.
-4. Record tests and verification evidence without claiming unmeasured results.
-5. Identify current limitations and the phase in which they should change.
-6. Prefer links to official framework documentation for behavior maintained by
-   an external tool or library.
+1. Read the finished code instead of copying the original plan.
+2. List the files, tools, runtime flow, and commands that really exist.
+3. Explain every important part in this order: what it does, why it exists, and
+   how it works.
+4. Keep technical names, but explain them in plain language before relying on
+   them.
+5. Record real test evidence without claiming results that were not measured.
+6. State the current limits and when they should be addressed.
+7. Link to official documentation when an external tool defines the behavior.
 
 ## Guide template
 
 Use the same reading order for every phase guide:
 
-1. **Phase at a glance** — result, technologies, and deliberate exclusions.
-2. **Repository structure** — files and modules added or changed.
-3. **Runtime flow** — how the parts interact when the system runs.
-4. **Module reviews** — purpose, main pieces, behavior, design, limits, tests.
-5. **Tool management** — dependencies, containers, data, or infrastructure.
-6. **Verification** — commands and the property proved by each command.
-7. **Review summary** — what is stable and what should be revisited later.
+1. **Phase at a glance** - the result, tools, and work deliberately left out.
+2. **Repository structure** - the files and modules added or changed.
+3. **Runtime flow** - what happens from the start of an operation to the end.
+4. **Module reviews** - what each part does, why it exists, and how it works.
+5. **Tool management** - dependencies, containers, data, or infrastructure.
+6. **Verification** - the commands run and what each result proves.
+7. **Review summary** - what should stay stable and what should change later.
 
-Prefer short paragraphs, comparison tables, and small code examples. Explain a
-term before using it as part of a design argument.
+Use short paragraphs, direct sentences, tables, and small examples. A reader
+should not need to know a term before opening the guide.

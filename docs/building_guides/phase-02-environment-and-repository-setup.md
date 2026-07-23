@@ -5,253 +5,300 @@
 | Item | Value |
 |---|---|
 | Reviewed | 2026-07-21 |
-| Result | Tested Python API baseline that runs locally and in Docker |
-| Not included | RAG, ingestion, databases, or frontend |
+| Result | A tested Python API that runs locally and in Docker |
+| Not included | RAG, ingestion, databases, or a frontend |
 
-This guide reviews the Phase 2 implementation. The
+This guide explains what we built in Phase 2, why each part exists, and how the
+parts work together. The
 [Phase 2 plan](../building_phases/phase-02-environment-and-repository-setup.md)
-contains the original objective and exit criteria.
+contains the original goal and completion rules.
+
+The simple result is: Phase 2 gave the project a reliable foundation. It can
+load configuration, produce logs, expose health endpoints, run a CLI command,
+execute automated checks, and start inside Docker.
 
 ## Frameworks and tools
 
-| Technology | Why it is used |
+| Technology | What it does here |
 |---|---|
-| Python 3.12 | Runtime, typing, `StrEnum`, and modern language features |
-| FastAPI | API routing, dependency injection, response validation, and OpenAPI |
-| Uvicorn | Runs the FastAPI ASGI application |
-| Pydantic | Defines and validates API response contracts |
-| Pydantic Settings | Loads typed settings from environment variables and `.env` |
-| Structlog | Creates structured log events and JSON production output |
-| Python `logging` | Handles levels, stdout, root logging, and library integration |
-| Typer | Provides the command-line interface and generated help |
-| pytest | Runs behavior-focused automated tests |
-| `httpx2` | Provides the transport used by FastAPI's test client |
-| Ruff | Lints, sorts imports, and formats Python code |
-| mypy | Strictly type-checks application source |
-| `uv` | Manages Python, dependencies, locking, syncing, and command execution |
-| Docker | Builds a reproducible API image |
-| Docker Compose | Configures and runs the local API container |
+| Python 3.12 | Runs the backend code and provides modern typing features |
+| FastAPI | Defines HTTP endpoints and checks their response shapes |
+| Uvicorn | Starts the FastAPI web server |
+| Pydantic | Describes and validates structured Python data |
+| Pydantic Settings | Reads configuration from environment variables and `.env` |
+| Structlog | Produces logs with named fields instead of unstructured sentences |
+| Python `logging` | Controls log levels and connects library logs to Structlog |
+| Typer | Creates the terminal command and its help screen |
+| pytest | Runs automated behavior checks |
+| `httpx2` | Supplies the HTTP transport used by FastAPI's test client |
+| Ruff | Finds common Python problems and checks formatting |
+| mypy | Checks that Python values match their declared types |
+| `uv` | Manages Python, dependencies, the lockfile, and project commands |
+| Docker | Builds one repeatable application image |
+| Docker Compose | Starts and checks that image locally |
+
+These tools have separate jobs. For example, FastAPI defines the API, Uvicorn
+runs it, and Pydantic checks the data that the API returns.
 
 ## Application Python files
 
 ### `src/european_heritage_rag/__init__.py`
 
-Marks `european_heritage_rag` as the main package and contains only the package
-docstring. Executable CLI code is kept in `cli.py`.
+What: this file marks `european_heritage_rag` as the main Python package.
+
+Why: Python needs a clear package boundary. The file contains no executable
+logic, so importing the package does not accidentally start the application.
+
+How: runnable CLI code lives in `cli.py`, and HTTP code lives in `api/`.
 
 ### `src/european_heritage_rag/api/__init__.py`
 
-Marks `api` as the HTTP adapter package. It is intentionally empty.
+What: this file marks `api` as the package that handles HTTP requests.
+
+Why: it gives API code a clear home without putting behavior in the package
+initializer.
 
 ### `src/european_heritage_rag/api/contracts.py`
 
-Uses Pydantic to define the public response shapes.
+What: this file defines the exact JSON shapes returned by the health endpoints.
 
-| Class | Explanation |
+| Class | Plain-language meaning |
 |---|---|
-| `HealthResponse` | Returns `status`, service name, and installed version. `status` is restricted to `"ok"`. |
-| `ReadinessResponse` | Extends `HealthResponse` with named readiness checks. |
+| `HealthResponse` | Returns `status`, service name, and installed version. The status can only be `"ok"`. |
+| `ReadinessResponse` | Returns the same fields plus named readiness checks. |
 
-Keeping contracts outside route code makes the API schema explicit and reusable.
+Why: an exact response shape makes the API predictable. If route code returns the
+wrong type or leaves out a required field, validation exposes the mistake.
+
+How: FastAPI uses these Pydantic classes both to validate responses and to
+describe them in the generated OpenAPI documentation.
 
 ### `src/european_heritage_rag/api/main.py`
 
-Uses FastAPI to construct the API and Uvicorn to run the exported `app`.
+What: this is the main HTTP application module.
 
-| Function | Explanation |
+| Function | What it does |
 |---|---|
-| `get_liveness()` | Returns a typed response confirming that the API process is alive. It deliberately checks no external service. |
-| `get_readiness(_settings)` | Uses FastAPI dependency injection to resolve settings, then reports the current configuration check as ready. |
-| `lifespan()` | Configures logging and emits `application_started` before serving requests; emits `application_stopped` during shutdown. |
-| `create_app()` | Creates FastAPI, attaches the lifespan, registers both health routes, and returns the application. |
+| `get_liveness()` | Confirms that the Python process is running. It does not check external services. |
+| `get_readiness(_settings)` | Confirms that the application can load its current configuration. |
+| `lifespan()` | Configures logging at startup and records startup/shutdown events. |
+| `create_app()` | Creates FastAPI, attaches startup behavior, and registers the health routes. |
 
 Important module values:
 
-| Value | Explanation |
+| Value | Why it exists |
 |---|---|
-| `_APPLICATION_VERSION` | Reads the version from installed package metadata, avoiding a second version constant. |
-| `logger` | Named structured logger for application lifecycle events. |
-| `app` | Module-level application imported by Uvicorn as `european_heritage_rag.api.main:app`. |
+| `_APPLICATION_VERSION` | Reads the installed package version so we do not maintain a second version string. |
+| `logger` | Gives this module a named structured logger. |
+| `app` | Gives Uvicorn the application object it must run. |
 
-Current limitation: readiness proves configuration loading only. Later phases
-should add checks when an index or database becomes required.
+How a request works:
+
+```text
+Browser or test
+      |
+      | GET /health/ready
+      v
+FastAPI route
+      |
+      | loads settings
+      v
+ReadinessResponse -> JSON response
+```
+
+Current limitation: readiness only proves that configuration can be loaded.
+Later phases should add database or index checks when those services exist.
 
 ### `src/european_heritage_rag/core/__init__.py`
 
-Marks `core` as the package for shared application infrastructure. It is
-intentionally empty.
+What: this marks `core` as the package for shared application setup.
+
+Why: configuration and logging are needed by several entry points, so they do
+not belong only to the HTTP API or only to the CLI.
 
 ### `src/european_heritage_rag/core/config.py`
 
-Uses Pydantic Settings for validated configuration and `lru_cache` for
-process-wide reuse.
+What: this file defines all Phase 2 configuration and validates it when the
+application starts.
 
-| Class or function | Explanation |
+| Class or function | What it does |
 |---|---|
 | `AppEnvironment` | Allows only `local`, `test`, and `production`. |
-| `LogLevel` | Allows only supported Python logging levels. |
-| `AppSettings` | Loads `APP_ENV` and `LOG_LEVEL`, applies safe defaults, ignores extra `.env` entries, and prevents mutation. |
-| `get_settings()` | Creates settings on the first call and returns the cached instance afterward. |
+| `LogLevel` | Allows only supported Python log levels. |
+| `AppSettings` | Reads settings, supplies defaults, ignores unrelated `.env` values, and prevents later changes. |
+| `get_settings()` | Creates settings once and reuses the same object. |
 
-`get_settings()` provides singleton-like behavior without a custom Singleton
-class. Tests can call `get_settings.cache_clear()` when they need a fresh
-environment read.
+Why: configuration should be changed outside the code. A developer can use a
+`.env` file, while a container or deployment system can use environment
+variables.
+
+How reuse works: `lru_cache` stores the first `AppSettings` object. Later calls
+return that object instead of repeatedly reading the environment. Tests call
+`get_settings.cache_clear()` when they need a fresh configuration.
 
 Current settings:
 
-| Field | Environment variable | Default |
+| Python field | Environment variable | Default |
 |---|---|---|
 | `app_env` | `APP_ENV` | `local` |
 | `log_level` | `LOG_LEVEL` | `INFO` |
 
 ### `src/european_heritage_rag/core/logging.py`
 
-Uses Structlog for structured events and Python `logging` for handlers, levels,
-and compatibility with Uvicorn and other libraries.
+What: this file creates one logging setup for our code, Uvicorn, and other
+Python libraries.
 
-| Function | Explanation |
+| Function | What it does |
 |---|---|
-| `configure_logging(settings)` | Builds the processor chain, chooses console or JSON rendering, configures stdout, sets the root level, and connects Structlog to standard logging. |
-| `get_logger(name, **initial_context)` | Returns a named structured logger with optional bound context. |
+| `configure_logging(settings)` | Chooses the output format, sends logs to stdout, and applies the configured level. |
+| `get_logger(name, **initial_context)` | Returns a logger with a name and optional fields that should appear in every event. |
 
-The shared processor chain adds context variables, logger name, level, UTC
-timestamp, stack information, and formatted exceptions.
+Why: logs should be easy for people to read locally and easy for software to
+process in production.
 
 | Environment | Output |
 |---|---|
-| `local` or `test` | Readable console events |
-| `production` | JSON events |
+| `local` or `test` | Readable console lines |
+| `production` | One JSON object per event |
 
-`configure_logging()` clears existing root handlers, so it belongs at the
-application boundary. Phase 2 calls it from the FastAPI lifespan.
+How: a shared processing chain adds the logger name, level, UTC time, context,
+stack data, and formatted errors. `configure_logging()` replaces existing root
+handlers, so it is called once at the application boundary.
 
 ### `src/european_heritage_rag/cli.py`
 
-Uses Typer to keep terminal interaction separate from the HTTP API.
+What: this file provides terminal commands separately from HTTP routes.
 
-| Function | Explanation |
+| Function | What it does |
 |---|---|
-| `cli()` | Root callback that keeps Typer in command-group mode. |
-| `show_version()` | Implements `european-heritage-rag version` using installed package metadata. |
-| `main()` | Starts the Typer application and acts as the console-script entry point. |
+| `cli()` | Keeps Typer in command-group mode. |
+| `show_version()` | Implements `european-heritage-rag version`. |
+| `main()` | Starts the Typer application. |
 
-Future CLI functions should parse terminal input and delegate to application
-services rather than implement retrieval or ingestion directly.
+Why: developers and operators need a direct way to run project tasks without
+going through a browser or writing an HTTP request.
+
+How: `pyproject.toml` maps the command name `european-heritage-rag` to
+`cli.main`. Future commands should read terminal options and call application
+services; the CLI file itself should not contain ingestion or retrieval logic.
 
 ## Test Python files
 
+The tests check behavior from the outside. They do not depend on a manually
+running server.
+
 ### `tests/api/test_health.py`
 
-| Fixture or test | Explanation |
+| Fixture or test | What it proves |
 |---|---|
-| `client()` | Creates `TestClient` as a context manager so FastAPI startup and shutdown run. |
-| `test_liveness_returns_expected_response()` | Verifies the liveness status, content type, and full response contract. |
-| `test_readiness_returns_configuration_check()` | Verifies the readiness status and configuration check. |
-| `test_application_logs_lifecycle_events()` | Replaces the logger with a mock and verifies startup and shutdown event order. |
+| `client()` | Runs FastAPI startup and shutdown around each API test. |
+| `test_liveness_returns_expected_response()` | The liveness endpoint returns the expected status, content type, and fields. |
+| `test_readiness_returns_configuration_check()` | The readiness endpoint includes its configuration check. |
+| `test_application_logs_lifecycle_events()` | Startup is logged before shutdown. |
 
 ### `tests/cli/test_cli.py`
 
-| Test | Explanation |
+| Test | What it proves |
 |---|---|
-| `test_version_command_prints_installed_version()` | Verifies successful dispatch and exact version output. |
-| `test_help_lists_available_commands()` | Verifies help output and command discovery. |
+| `test_version_command_prints_installed_version()` | The version command runs and prints the installed version. |
+| `test_help_lists_available_commands()` | The help page can find and list the commands. |
 
 ### `tests/config/test_config.py`
 
-| Test | Explanation |
+| Test | What it proves |
 |---|---|
-| `test_settings_use_safe_defaults()` | Verifies local environment and INFO logging defaults. |
-| `test_environment_variables_override_defaults()` | Verifies environment values replace defaults. |
-| `test_invalid_environment_is_rejected()` | Verifies unsupported environments fail validation. |
-| `test_settings_provider_reuses_single_instance()` | Verifies the cached provider returns the same object. |
-| `test_settings_cannot_be_modified_after_creation()` | Verifies settings are frozen. |
+| `test_settings_use_safe_defaults()` | Local and INFO are used when nothing overrides them. |
+| `test_environment_variables_override_defaults()` | Environment variables replace defaults. |
+| `test_invalid_environment_is_rejected()` | Unsupported environment names fail validation. |
+| `test_settings_provider_reuses_single_instance()` | The settings provider reuses one object. |
+| `test_settings_cannot_be_modified_after_creation()` | Runtime code cannot silently change settings. |
 
 ### `tests/logging/test_logging.py`
 
-| Fixture or test | Explanation |
+| Fixture or test | What it proves |
 |---|---|
-| `restore_logging_state()` | Preserves and restores global logging state around each test. |
-| `test_local_logging_uses_readable_structured_output()` | Verifies local console rendering and structured fields. |
-| `test_production_logging_uses_json_output()` | Verifies production JSON and parseable fields. |
-| `test_logging_filters_events_below_configured_level()` | Verifies root-level filtering. |
-| `test_standard_library_logs_use_configured_renderer()` | Verifies built-in logging uses the shared pipeline. |
+| `restore_logging_state()` | A test cannot leave global logging changed for the next test. |
+| `test_local_logging_uses_readable_structured_output()` | Local logs are readable and still contain named fields. |
+| `test_production_logging_uses_json_output()` | Production logs are valid JSON with the expected data. |
+| `test_logging_filters_events_below_configured_level()` | Events below the chosen level are hidden. |
+| `test_standard_library_logs_use_configured_renderer()` | Logs from normal Python libraries use the same output pipeline. |
 
-Test directories have no `__init__.py`. In particular, a package named
-`tests/logging` would otherwise risk shadowing Python's built-in `logging`
-module during test collection.
+The test folders do not contain `__init__.py`. This avoids creating a test
+package named `logging`, which could hide Python's built-in `logging` module.
 
 ## `uv` management review
 
-| File | Responsibility |
+`uv` keeps Python and dependency setup repeatable.
+
+| File | What it controls |
 |---|---|
-| `.python-version` | Selects Python 3.12 locally. |
-| `pyproject.toml` | Declares the project, direct dependencies, dev group, CLI entry point, build backend, and tool settings. |
-| `uv.lock` | Records the complete resolved dependency graph. |
+| `.python-version` | Chooses Python 3.12 for this repository. |
+| `pyproject.toml` | Lists project information, direct dependencies, development tools, the CLI entry point, and tool settings. |
+| `uv.lock` | Records the exact resolved dependency versions. |
 
-Runtime libraries belong in `[project].dependencies`. pytest, Ruff, mypy, and
-`httpx2` belong in the development dependency group because the running API
-does not need them.
+Why both files matter: `pyproject.toml` says what the project directly needs.
+`uv.lock` records the complete version set that was proven to work. Commit them
+together after changing dependencies.
 
-| Command | Purpose |
+| Command | What to use it for |
 |---|---|
-| `uv add <package>` | Add a runtime dependency and update the lock. |
-| `uv add --dev <package>` | Add a development dependency and update the lock. |
-| `uv lock --check` | Verify that the lock matches `pyproject.toml`. |
-| `uv sync --locked` | Reproduce the locked local environment. |
-| `uv run --locked <command>` | Run inside the managed environment without changing a stale lock. |
+| `uv add <package>` | Add a library needed while the application runs. |
+| `uv add --dev <package>` | Add a library used only for development or tests. |
+| `uv lock --check` | Confirm that the lockfile matches `pyproject.toml`. |
+| `uv sync --locked` | Recreate the environment without changing the lockfile. |
+| `uv run --locked <command>` | Run a command inside that locked environment. |
 
-Commit `pyproject.toml` and `uv.lock` together after dependency changes. Do not
-edit resolved dependencies in `uv.lock` manually.
-
-`uv_build` is the Python package build backend. It is separate from the `uv`
-executable installed locally or copied into Docker.
+Do not edit resolved package entries in `uv.lock` by hand. `uv_build` is the
+package-building backend; it is different from the `uv` terminal program.
 
 ## Docker review
 
-`Dockerfile` defines how the API image is built.
+Docker packages the application and its runtime into one image.
 
-| Step | Purpose |
+| Dockerfile step | Why we do it |
 |---|---|
-| Python 3.12 slim base | Provides the Linux Python runtime. |
-| Pinned `uv` copy | Adds `uv` without an installer script. |
-| Copy lock and project files first | Allows Docker to reuse the dependency layer. |
-| `uv sync --locked --no-dev` | Installs exact runtime dependencies only. |
-| Copy `src` and sync non-editably | Installs the application as a deployment artifact. |
-| Add `.venv/bin` to `PATH` | Makes Uvicorn directly executable. |
-| Switch to `appuser` | Prevents the server from running as root. |
-| Exec-form `CMD` | Starts Uvicorn and receives container signals correctly. |
+| Start from Python 3.12 slim | Use the required Python version without a large base image. |
+| Copy a pinned `uv` executable | Install dependencies without downloading an installer script. |
+| Copy dependency files first | Let Docker reuse the slow dependency layer when only source code changes. |
+| Run `uv sync --locked --no-dev` | Install exact runtime packages but not test tools. |
+| Copy and install `src` non-editably | Package the application as it will run in deployment. |
+| Add `.venv/bin` to `PATH` | Allow the container to call Uvicorn directly. |
+| Switch to `appuser` | Avoid running the web server with root privileges. |
+| Use an exec-form `CMD` | Let Uvicorn receive stop signals correctly. |
 
-`.dockerignore` excludes the host virtual environment, Git data, caches, local
-`.env`, tests, and documentation from the build context.
+`.dockerignore` keeps local environments, Git data, caches, `.env`, tests, and
+documentation out of the build context.
 
-Current trade-offs: image tags are not pinned by immutable digest, `uv` remains
-in the runtime image, and `phase2` is a milestone tag rather than a release
-tagging strategy.
+Accepted Phase 2 limits: base images are not pinned by an exact unchanging digest,
+`uv` remains in the final image, and `phase2` is a milestone name rather than a
+long-term release-tag policy.
 
 ## Docker Compose review
 
-`compose.yaml` defines how the image runs locally.
+Compose describes how to run the image locally.
 
-| Setting | Purpose |
+| Setting | What it means |
 |---|---|
-| `build` | Uses the repository root and root Dockerfile. |
-| `image` | Names the local image `european-heritage-rag:phase2`. |
-| `environment` | Selects production JSON logging at INFO level. |
-| `ports` | Publishes container port 8000 on localhost port 8000. |
-| `healthcheck` | Calls `/health/ready` inside the container. |
+| `build` | Build from this repository's root Dockerfile. |
+| `image` | Name the local image `european-heritage-rag:phase2`. |
+| `environment` | Use production JSON logs at INFO level. |
+| `ports` | Make container port 8000 available at local port 8000. |
+| `healthcheck` | Ask `/health/ready` whether the container is ready. |
 
-Compose intentionally contains only the API. Databases and volumes should be
-added only when application code needs them.
+Phase 2 intentionally has one API service. A database or volume should be
+added only when application code actually needs it.
 
-| Command | Purpose |
+| Command | What it does |
 |---|---|
-| `docker compose config --quiet` | Validate the resolved Compose configuration. |
-| `docker compose up --build --detach` | Build and start the API in the background. |
-| `docker compose ps` | Inspect container and health state. |
-| `docker compose logs api` | Read API output. |
-| `docker compose down` | Remove the Compose container and network. |
+| `docker compose config --quiet` | Checks that the Compose file is valid. |
+| `docker compose up --build --detach` | Builds and starts the API in the background. |
+| `docker compose ps` | Shows the running and health state. |
+| `docker compose logs api` | Shows API logs. |
+| `docker compose down` | Removes the container and its network. |
 
 ## Verification
+
+Run these commands from the repository root:
 
 ```powershell
 uv lock --check
@@ -266,6 +313,14 @@ docker compose ps
 docker compose down
 git diff --check
 ```
+
+What this proves:
+
+- dependency files agree and can recreate the environment;
+- application behavior passes its automated tests;
+- Python style and type checks pass;
+- the container can build, start, and report healthy; and
+- the Git changes do not contain whitespace mistakes.
 
 ## Official references
 

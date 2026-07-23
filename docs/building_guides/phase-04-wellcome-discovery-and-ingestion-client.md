@@ -2,45 +2,68 @@
 
 ## 1. Phase at a glance
 
-Phase 4 replaces the ingestion dashboard's sample numbers with a real,
-resumable source traversal. HeritageRAG can now discover a bounded set of
-English public-domain online books from Wellcome Catalogue API v2, retrieve
-their IIIF Presentation 2 manifests, follow canvases in source order, and
-reconstruct the available plain-text OCR for each canvas.
+Phase 4 taught HeritageRAG how to find books at Wellcome and read their
+available OCR in page order.
 
-This is discovery and traversal, not the durable data lake. The run keeps
-status and a small checkpoint on disk, but raw catalogue, manifest, annotation,
-and OCR payloads remain a Phase 5 responsibility.
+In simple terms, the program can now:
 
-| Area | Implemented choice |
+1. ask Wellcome for a small list of suitable books;
+2. find the page map for each book;
+3. visit each page in order;
+4. collect the OCR text attached to that page;
+5. record progress after every book; and
+6. continue a matching run after an interruption.
+
+This phase does not save the books or OCR as a reusable dataset. It only proves
+that we can find and traverse them correctly. Phase 5 will store the raw source
+data in the Bronze layer.
+
+### Important terms
+
+| Term | Simple meaning in this project |
 |---|---|
-| Discovery source | Wellcome Catalogue API v2 |
-| Page/provenance structure | IIIF Presentation 2 manifests and canvases |
-| OCR source | IIIF annotation lists with plain-text content bodies |
-| HTTP runtime | One reusable synchronous `httpx2.Client` |
-| Resilience | Tenacity, bounded attempts, capped waits, `Retry-After` support |
-| Validation | Narrow Pydantic v2 source and run-state models |
-| Orchestration | Sequential per-work runner with failure isolation |
-| Resume state | Atomic JSON status and checkpoint files |
-| Operator entry point | Typer command `ingest wellcome` |
+| Catalogue API | Wellcome's machine-readable list of works and their metadata |
+| IIIF | A standard way for libraries to describe digital objects such as scanned books |
+| Manifest | A JSON document that describes one digital book and its ordered pages |
+| Canvas | IIIF's page-like unit; usually one scanned page or image |
+| OCR | Text that software has read from a scanned page |
+| Annotation list | A JSON document that connects OCR text to a canvas |
+| Checkpoint | A small save point used to continue an interrupted run |
+| Dry run | Discovery only; it does not request manifests or OCR |
+| Bronze layer | The future unchanged copy of source responses and acquisition facts |
+
+### Main technical choices
+
+| Area | Choice made in Phase 4 |
+|---|---|
+| Book discovery | Wellcome Catalogue API v2 |
+| Page order | IIIF Presentation 2 manifests and canvases |
+| OCR source | IIIF annotation lists containing plain text |
+| HTTP requests | One reusable synchronous `httpx2.Client` |
+| Temporary failures | Tenacity retries with limited attempts and waits |
+| JSON validation | Small Pydantic models containing only fields we use |
+| Processing order | One work at a time |
+| Resume data | Two small JSON files written safely to disk |
+| Operator command | `european-heritage-rag ingest wellcome` |
 | Progress API | `GET /ingestion/status` |
-| Browser progress | Three-second polling of real persisted state |
-| Container state | Named volume at `/app/var/ingestion` |
+| Dashboard updates | Poll the status API every three seconds |
+| Docker persistence | Named volume mounted at `/app/var/ingestion` |
 
-Deliberate exclusions:
+Not included in Phase 4:
 
-- Bronze storage of raw source payloads or reconstructed OCR.
-- OCR cleaning, normalization, chunking, or search indexing.
-- Parallel/asynchronous downloads.
-- Canvas-level resume inside one work.
-- French or Dutch discovery.
-- A database or distributed job queue.
-- Server-Sent Events or WebSockets.
-- Catalogue-wide performance claims.
+- storing raw catalogue, manifest, annotation, or OCR responses;
+- cleaning OCR text;
+- splitting text into retrieval chunks;
+- search or vector indexing;
+- parallel downloads;
+- resuming in the middle of one book;
+- French or Dutch discovery;
+- a job database or distributed workers; and
+- live push updates through Server-Sent Events or WebSockets.
 
 ## 2. Repository structure
 
-The meaningful Phase 4 files are:
+The main Phase 4 files are:
 
 ```text
 src/european_heritage_rag/
@@ -67,18 +90,19 @@ tests/
 frontend/
 |-- app.js
 |-- index.html
-`-- styles.css
+|-- styles.css
+`-- vite.config.js
 
+.env.example
 Dockerfile
 compose.yaml
-.env.example
 
 docs/adr/
 |-- 0004-wellcome-api-and-iiif-ingestion-strategy.md
 `-- README.md
 ```
 
-Runtime state is generated under `var/ingestion/` and ignored by Git:
+The application creates these local state files while it runs:
 
 ```text
 var/ingestion/
@@ -86,400 +110,603 @@ var/ingestion/
 `-- wellcome-checkpoint.json
 ```
 
+They are ignored by Git because they describe one local run.
+
+- `wellcome-status.json` is the latest progress shown by the API and dashboard.
+- `wellcome-checkpoint.json` contains the minimum information needed to resume.
+
+Neither file contains the actual source records or OCR corpus.
+
 ## 3. Runtime flow
 
-```text
-CLI: ingest wellcome
-        |
-        v
-WellcomeIngestionRunner
-        |
-        | discover_works(limit, query, language)
-        v
-Wellcome Catalogue API v2 ---- follows nextPage ----+
-        |                                            |
-        +-- local eligibility validation <-----------+
-        |
-        v
-eligible works in catalogue order
-        |
-        | one work at a time
-        v
-IIIF manifest -> first sequence -> ordered canvases
-        |                              |
-        |                              +-- no OCR reference -> text=None
-        v
-ordered annotation lists -> ordered plain-text lines
-        |
-        +-- update status after each event
-        `-- replace checkpoint after each processed work
+The full flow is:
 
-wellcome-status.json ---- GET /ingestion/status ---- browser polling
-wellcome-checkpoint.json ---- --resume ---- skip completed/retry failed works
+```text
+CLI command
+    |
+    v
+Discover eligible works from Wellcome Catalogue API
+    |
+    v
+Check each result against our rules
+    |
+    v
+Process one work at a time
+    |
+    +--> request its IIIF manifest
+    |        |
+    |        v
+    |    read canvases in order
+    |        |
+    |        v
+    |    request each OCR annotation list
+    |        |
+    |        v
+    |    keep plain-text OCR lines in source order
+    |
+    +--> write status and checkpoint
+    |
+    v
+Move to the next work
 ```
 
-All external JSON passes through Pydantic before traversal. Source responses
-are not written to a corpus directory in this phase.
+The status reaches the browser through a separate read path:
+
+```text
+wellcome-status.json
+        |
+        | read by FastAPI
+        v
+GET /ingestion/status
+        |
+        | requested every three seconds
+        v
+Ingestion dashboard
+```
+
+The CLI is the writer. The API and browser only read the latest status.
 
 ## 4. Step-by-step build
 
-This section follows the same order used while building the phase. Each step
-states what was built, why it exists, and how it was checked.
+This section follows the order in which we built Phase 4. Every step explains
+what we did, why we needed it, and how it works.
 
-### Step 0 - Review the phase contract and existing architecture
+### Step 0 - Review the phase boundary
 
-Goal: identify what Phase 4 must add without crossing into Phase 5.
+#### What we did
 
-Substeps:
+We read the learning agreement, Phase 4 plan, Phase 3 guide, and existing ADRs.
+We turned the Phase 4 completion rules into concrete behavior:
 
-1. Read the learning agreement, Phase 4 plan, Phase 3 guide, and existing ADRs.
-2. Preserve the current Python 3.12, `uv`, `src` layout, FastAPI application
-   factory, Typer CLI, Vite frontend, and one-service container.
-3. Convert the phase exit criteria into observable behaviors:
-   - five works can be discovered and traversed;
-   - missing OCR does not crash a work;
-   - an interrupted run has durable resume state;
-   - automated tests never require the live Wellcome API;
-   - the dashboard displays real status.
-4. Keep raw source persistence out of scope because Phase 5 defines Bronze
-   identity, checksums, versioning, and replay.
+- discover and traverse five works;
+- do not crash when a page has no OCR;
+- save enough information to resume;
+- keep automated tests offline; and
+- show real progress in the dashboard.
 
-Why: the phase plan is an intended design, while the guide records the tested
-implementation. Reviewing the boundaries first prevents a source client from
-turning into an unplanned storage pipeline.
+#### Why
 
-### Step 1 - Define dependencies and environment-driven settings
+The important boundary was between Phase 4 and Phase 5. Phase 4 should learn
+how to fetch and understand Wellcome data. Phase 5 should decide how raw data
+is named, stored, checked, and replayed.
 
-Goal: create one validated configuration contract for every Wellcome request
-and for the local state directory.
+If we stored source payloads now, we would create a Bronze format before making
+its design decisions.
 
-Substeps:
+#### How to think about it
 
-1. Add `tenacity` for explicit retry behavior. The existing `httpx2` runtime is
-   used for HTTP, and pytest-httpx2/respx support offline request tests.
-2. Add these `AppSettings` fields:
-   - catalogue base URL;
-   - User-Agent;
-   - connect, read, write, and pool timeouts;
-   - maximum attempts;
-   - maximum retry wait;
-   - ingestion state directory.
-3. Give every field a safe local default while allowing the matching
-   environment variable to override it. For example,
-   `WELLCOME_READ_TIMEOUT_SECONDS=45` overrides the default without editing
-   code.
-4. Validate bounds with Pydantic so zero/negative timeouts and unreasonable
-   retry settings fail during configuration loading.
+Phase 4 is the reader and run controller. Phase 5 will be the archive.
 
-Why: defaults are not hard-coded deployment decisions. They are documented
-fallback values in a typed settings object; environment variables remain the
-runtime control surface.
+### Step 1 - Add dependencies and settings
 
-### Step 2 - Model only the Wellcome fields currently needed
+#### What we did
 
-Goal: turn external JSON into small typed objects before business logic uses
-it.
+We used the existing `httpx2` package for HTTP and added Tenacity for retry
+control. We added settings for:
 
-Substeps:
+- Wellcome catalogue base URL;
+- User-Agent;
+- connect timeout;
+- read timeout;
+- write timeout;
+- connection-pool timeout;
+- maximum attempts;
+- maximum wait between attempts; and
+- local status/checkpoint directory.
 
-1. Model catalogue identifiers, licences, digital locations, items, works,
-   and paginated result pages.
-2. Model IIIF manifests, sequences, canvases, annotation-list references,
-   annotation lists, annotations, and annotation bodies.
-3. Add internal `TraversedWork` and `TraversedPage` result models.
-4. Ignore unknown source fields so harmless API additions do not break the
-   client.
-5. Keep structural type markers strict, such as `sc:Manifest`, `sc:Canvas`, and
-   `sc:AnnotationList`.
-6. Reflect real source variants:
-   - physical locations may have no URL;
-   - image annotation bodies may omit `@type`;
-   - eligibility still requires one PDM IIIF location with a URL;
-   - OCR extraction still accepts only `cnt:ContentAsText` and `text/plain`.
+The same settings and defaults are listed in `.env.example`.
 
-Why: parsing should tolerate unrelated source content without relaxing the
-rules that define an eligible work or a usable OCR line.
+#### Why
 
-### Step 3 - Build representative offline fixtures and model tests
+Network behavior should not be scattered through the client code. A developer
+or deployment can change a timeout or User-Agent without editing Python.
 
-Goal: understand the response shapes and create deterministic examples before
-network behavior is implemented.
+Defaults are not locked deployment values. They are safe fallback values.
+Environment variables can replace them, for example:
 
-Substeps:
+```powershell
+$env:WELLCOME_READ_TIMEOUT_SECONDS = "45"
+```
 
-1. Add a catalogue result containing an eligible book and an ineligible work.
-2. Add a two-canvas IIIF manifest where one canvas has OCR and one does not.
-3. Add an annotation list with two ordered OCR lines.
-4. Prove the fixtures parse and preserve canvas/line order.
-5. Prove unknown fields are ignored and incorrect manifest types are rejected.
-6. Add regression variants found during the live smoke test: a physical
-   location without a URL and a picture annotation body without `@type`.
+#### How it works
 
-Why: fixtures document the subset of each external format that the code relies
-on, while tests separate model mistakes from HTTP mistakes.
+Pydantic Settings reads the environment and validates each value. Invalid
+values, such as a zero timeout or too many retry attempts, fail early during
+settings creation.
 
-### Step 4 - Implement the Wellcome HTTP and IIIF client
+### Step 2 - Create small models for source JSON
 
-Goal: provide one resilient source adapter that can discover and fully
-traverse a work.
+#### What we did
 
-#### Step 4.1 - Create the reusable HTTP client
+We added Pydantic models for only the data needed now:
 
-1. Construct one context-managed `httpx2.Client`.
-2. Apply the configured base URL, User-Agent, JSON accept header, redirects,
-   and four timeout values.
-3. Reuse its connection pool for catalogue, manifest, and OCR requests.
+- catalogue pages, works, items, locations, licences, and languages;
+- IIIF manifests, sequences, canvases, and annotation-list links;
+- OCR annotations and their text bodies; and
+- our internal `TraversedWork` and `TraversedPage` results.
 
-#### Step 4.2 - Define retry behavior
+#### Why
 
-1. Retry network/request exceptions.
-2. Retry only HTTP 408, 429, 500, 502, 503, and 504.
-3. Do not retry permanent responses such as 400 or 404.
-4. Respect a numeric `Retry-After` header, capped by configuration.
-5. Fall back to capped exponential waits when the header is absent or invalid.
-6. Count every actual retry wait for status reporting.
+External JSON should be checked before traversal code trusts it. At the same
+time, Wellcome responses contain many fields that Phase 4 does not use.
+Copying every field would create unnecessary work and make our code depend on
+more source details.
+
+#### How it works
+
+The models follow two rules:
+
+1. Required structure is strict. A manifest must identify itself as an IIIF
+   manifest, and required IDs must be valid.
+2. Unused fields are ignored. A new unrelated field from Wellcome will not
+   break the client.
+
+The live source showed two useful examples:
+
+- a physical location may have no URL;
+- a picture annotation body may have no `@type`.
+
+The models accept those unrelated variants, but the business rules remain
+strict. A work is eligible only when it has a PDM IIIF URL, and OCR is accepted
+only when it is explicitly plain text.
+
+### Step 3 - Add offline fixtures and model tests
+
+#### What we did
+
+We added three small JSON examples:
+
+1. a catalogue page with eligible and ineligible works;
+2. a two-canvas manifest where one canvas has OCR and one does not; and
+3. an annotation list containing two OCR lines.
+
+Tests prove that the models:
+
+- parse these examples;
+- keep canvas and line order;
+- ignore fields we do not use;
+- reject the wrong IIIF object type;
+- allow a physical location without a URL; and
+- allow a non-text picture body without `@type`.
+
+#### Why
+
+Fixtures make source behavior repeatable. They let us learn and test the JSON
+shape without asking the live Wellcome service every time.
+
+#### How to think about it
+
+A fixture is a controlled example, not a fake claim about the entire API. Live
+smoke tests later check whether the examples still match current source data.
+
+### Step 4 - Build the Wellcome client
+
+The client owns communication with Wellcome. It does not own run checkpoints
+or the dashboard.
+
+#### Step 4.1 - Reuse one HTTP client
+
+What we did:
+
+1. Create one context-managed `httpx2.Client`.
+2. Apply the base URL, User-Agent, JSON header, redirects, and four timeouts.
+3. Reuse the same connection pool for catalogue, manifest, and OCR requests.
+
+Why: opening a new connection setup for every page is wasteful. One client also
+ensures that every source request follows the same policy.
+
+#### Step 4.2 - Retry only temporary problems
+
+What we retry:
+
+- network/request errors; and
+- HTTP 408, 429, 500, 502, 503, and 504.
+
+What we do not retry:
+
+- permanent client responses such as 400 and 404.
+
+How waiting works:
+
+1. If the server gives a numeric `Retry-After`, use it up to our configured
+   maximum.
+2. Otherwise, use an increasing exponential wait up to that maximum.
+3. Stop after the configured number of attempts.
+4. Count every retry wait so it appears in status.
+
+Why: retrying can solve a temporary overload or network interruption. It will
+not fix a bad URL or invalid request, so repeating permanent errors only adds
+delay and load.
 
 #### Step 4.3 - Discover eligible works
 
-1. Send the server-side filters listed in ADR-0004.
-2. Request `items,languages`, because local validation needs those fields.
-3. Follow absolute `nextPage` links.
-4. Preserve catalogue result order.
-5. Re-check work type, online availability, language, PDM licence, IIIF
-   location type, and URL locally.
-6. Stop when the requested number of eligible works is reached or pagination
-   ends.
+The catalogue request uses these filters:
 
-#### Step 4.4 - Select and retrieve the manifest
+```text
+workType=a
+availabilities=online
+items.locations.license=pdm
+items.locations.locationType=iiif-presentation
+languages=eng
+include=items,languages
+```
 
-1. Find the first digital location that is both PDM and IIIF Presentation.
-2. Retrieve and validate the manifest through the same retry path.
-3. Require a default sequence; report a clear structure error if none exists.
-4. Traverse the first sequence's canvases in declared order.
+Simple meaning:
 
-#### Step 4.5 - Reconstruct OCR per canvas
+- `workType=a`: books/monographs for this initial source slice;
+- `online`: a digital item is available;
+- `pdm`: it carries the Public Domain Mark;
+- `iiif-presentation`: it has a page manifest we can traverse;
+- `eng`: it belongs to the English baseline; and
+- `include=items,languages`: return the fields needed for our own check.
 
-1. Follow every `otherContent` reference in its declared order.
-2. Retrieve and validate every referenced annotation list.
-3. Keep only supported plain-text content bodies.
-4. Preserve line order and join lines with `\n` without cleaning.
-5. Store canvas index, canvas URL, label, annotation URLs, source lines, and
-   joined text in `TraversedPage`.
-6. Use `text=None` when a canvas has no usable OCR.
-7. Fail the work if a referenced OCR list cannot be retrieved; do not disguise
-   a 404 as legitimately missing OCR.
+The API filters first. The client then checks every returned work locally. This
+second check protects our eligibility rules if a response is incomplete or
+mixed.
 
-Why: catalogue discovery and IIIF traversal are one external-source concern,
-but the client does not own run state or durable storage.
+If Wellcome provides `nextPage`, the client follows it and preserves result
+order. It stops when it has enough eligible works or there are no more pages.
 
-### Step 5 - Add orchestration, status, checkpoints, and resume
+#### Step 4.4 - Retrieve the manifest
 
-Goal: make a multi-work run observable and safely restartable.
+For one eligible work, the client:
 
-Substeps:
+1. selects a digital location that is PDM and IIIF Presentation;
+2. requests its manifest through the same retry system;
+3. validates the JSON;
+4. uses the first/default sequence; and
+5. visits its canvases in declared order.
 
-1. Define `IngestionStatus` for CLI/API/UI state and `IngestionCheckpoint` for
-   minimal resume state.
-2. Atomically replace JSON files through a temporary sibling file, avoiding a
-   partially written status document.
-3. Create a stable SHA-256 fingerprint from limit, normalized query, and
-   language.
-4. Start a fresh run with a unique run ID, or require an existing matching
-   fingerprint for `--resume`.
-5. Discover first, then traverse works sequentially.
-6. Checkpoint after every completed or failed work.
-7. On resume, skip completed work IDs and retry failed work IDs.
-8. Record one work's terminal exception, continue with later works, and finish
-   as `completed_with_failures` when necessary.
-9. Treat discovery failure as a failed run because no reliable work list
-   exists to process.
-10. Count missing OCR pages separately from failures.
-11. Retain only the latest 20 operator events.
-12. Implement dry-run as catalogue-only discovery with status updates and no
-    checkpoint changes.
+If no sequence exists, the client reports a clear structure error. Without a
+sequence, it cannot know the page order.
 
-Why: work-granular state is enough to meet the phase's interruption criterion
-without introducing a database or pretending that Phase 4 stores corpus data.
+#### Step 4.5 - Rebuild the page OCR
 
-### Step 6 - Expose operations through CLI, API, UI, and Docker
+For each canvas, the client:
 
-Goal: make the traversal usable by an operator and visible in the existing
-application shell.
+1. reads each `otherContent` annotation-list URL in order;
+2. downloads and validates the annotation list;
+3. keeps only `cnt:ContentAsText` bodies in `text/plain` format;
+4. keeps the OCR lines in their original order;
+5. joins the lines with `\n` without cleaning them; and
+6. stores the canvas index, URL, label, annotation URLs, lines, and joined text.
 
-#### Step 6.1 - CLI
+Two cases must stay separate:
 
-Add:
+- No OCR is available: the page is valid and receives `text=None`.
+- An advertised OCR URL fails: the work fails because a source request did not
+  succeed.
+
+Why: silently treating a broken URL as missing OCR would hide a real ingestion
+problem.
+
+### Step 5 - Add run status, checkpoints, and resume
+
+The Wellcome client handles one source operation. The ingestion runner handles
+the whole multi-work job.
+
+#### What we did
+
+We created:
+
+- `IngestionStatus`: information for the CLI, API, and dashboard;
+- `IngestionCheckpoint`: the minimum data required to resume;
+- `IngestionStateStore`: reads and safely replaces the JSON files; and
+- `WellcomeIngestionRunner`: controls discovery and work processing.
+
+#### How a new run works
+
+1. Check the options.
+2. Create a unique run ID.
+3. Create an option fingerprint from limit, query, and language.
+4. Write the starting status and checkpoint.
+5. Discover works.
+6. Process one work at a time.
+7. After each work, replace the checkpoint.
+8. Finish as `completed` or `completed_with_failures`.
+
+#### What is a fingerprint?
+
+It is a SHA-256 value made from the options that define the work list:
+
+- limit;
+- normalized query; and
+- language.
+
+It is not a security secret. It is a reliable comparison value. Resume is
+allowed only when the current options produce the same fingerprint.
+
+#### How resume works
+
+1. Load the existing checkpoint.
+2. Confirm that its fingerprint matches the current options.
+3. Discover the same limited work list again.
+4. Skip IDs already marked complete.
+5. Try previously failed or unfinished works again.
+
+The checkpoint is work-level. If the process stops halfway through one book,
+resume starts that book again from its manifest.
+
+#### How failures work
+
+- A discovery failure ends the run because there is no reliable work list.
+- A single work failure is recorded, but later works still run.
+- A missing-OCR page is counted separately and does not fail the work.
+- Status keeps only the latest 20 events so the file stays small.
+
+#### How files are written safely
+
+The store first writes a temporary file beside the real file. It then replaces
+the real file with the completed temporary file. This reduces the chance that
+the API reads a half-written JSON document.
+
+#### How dry-run works
+
+Dry-run performs catalogue discovery and updates status. It does not request
+manifests or OCR, and it does not create or change the resume checkpoint.
+
+### Step 6 - Connect CLI, API, dashboard, and Docker
+
+#### Step 6.1 - CLI command
+
+The command is:
 
 ```powershell
 uv run european-heritage-rag ingest wellcome
 ```
 
-Options:
+| Option | Meaning |
+|---|---|
+| `--limit` | Maximum eligible works, from 1 to 100; default is 5 |
+| `--query` | Optional Wellcome search text |
+| `--language` | Language filter; Phase 4 accepts only `eng` |
+| `--resume` | Continue the matching checkpoint |
+| `--dry-run` | Discover works but do not request manifests or OCR |
 
-- `--limit`: maximum eligible works, 1-100, default 5.
-- `--query`: optional catalogue query.
-- `--language`: currently `eng` only.
-- `--resume`: continue the matching checkpoint.
-- `--dry-run`: discover only; do not fetch manifests or OCR.
+`--resume` and `--dry-run` cannot be used together. One continues a saved full
+run; the other deliberately creates no resume checkpoint.
 
-`--resume` and `--dry-run` are mutually exclusive. The command prints the run
-ID, final state, work counts, traversed canvases, missing OCR, retries, and
-failures.
+At the end, the CLI prints the run ID, status, work counts, canvases traversed,
+missing OCR, retries, and failures.
 
-#### Step 6.2 - API
+#### Step 6.2 - Status API
 
-Register `GET /ingestion/status` before the root static mount. It loads the
-current file on every request and returns a typed idle response when no status
-file exists.
+FastAPI now exposes:
+
+```http
+GET /ingestion/status
+```
+
+The route reads `wellcome-status.json` for every request. Before the first run,
+it returns a valid idle status instead of an error.
+
+The route is registered before the broad frontend mount so `/` cannot hide it.
 
 #### Step 6.3 - Browser dashboard
 
-Replace only the ingestion panel's mock boundary. The browser:
+Phase 4 replaced only the ingestion view's sample progress. Other explorer,
+retrieval, evaluation, and chat data remains demonstration content.
 
-1. requests `/ingestion/status` immediately;
-2. polls every three seconds;
+The browser:
+
+1. requests status as soon as it starts;
+2. asks again every three seconds;
 3. cancels a request after 3.5 seconds;
-4. prevents overlapping polls;
-5. renders work/page/missing/failure/retry counts, current work, stages, recent
-   events, and attention state;
-6. creates event elements with `textContent`, not source-derived HTML;
-7. shows a safe unavailable state when polling fails.
+4. prevents two status requests from overlapping;
+5. updates works, pages, missing OCR, failures, retries, current work, stages,
+   recent events, and attention text; and
+6. shows an unavailable state if the API cannot be reached.
 
-The rest of the Phase 3 explorer remains demonstration UI. The New run button
-shows the CLI command because the browser does not start server-side jobs in
-this phase.
+Event text is inserted with `textContent`. This means source-provided titles or
+errors are displayed as text, not interpreted as HTML.
 
-#### Step 6.4 - Container state
+The New run button shows the CLI command. The browser does not start ingestion
+jobs in this phase.
 
-1. Create `/app/var/ingestion` in the image.
-2. Give the unprivileged application user ownership.
-3. Mount the `ingestion-state` named volume through Compose.
-4. Keep the API and ingestion command in the same Phase 4 image.
+#### Step 6.4 - Docker state
 
-Why: the CLI remains the explicit write/operation boundary, while the API and
-UI are read-only views of the same persisted status.
+The image creates `/app/var/ingestion` and gives the unprivileged application
+user permission to write there.
 
-### Step 7 - Verify offline first, then use a bounded live smoke test
+Compose mounts a named volume at that path. Replacing the API container does
+not remove its status or checkpoint.
 
-Goal: prove behavior without making the test suite dependent on an external
-service.
+Why: a checkpoint is only useful if normal container replacement does not
+erase it.
 
-Substeps:
+### Step 7 - Test offline and then run a small live check
 
-1. Mock every automated Wellcome request.
-2. Test two-page pagination, retryable failures, numeric `Retry-After`, invalid
-   retry headers, permanent errors, local eligibility, canvas order, missing
-   OCR, and referenced annotation failures.
-3. Test dry-run, atomic status/checkpoint behavior, per-work failure
-   continuation, resume skipping, retry of failures, and fingerprint mismatch.
-4. Test CLI defaults/options/validation and the idle/saved status API.
-5. Run all Python quality gates and build the Vite bundle.
-6. Inspect the real dashboard on desktop and at 390 pixels wide; verify that it
-   has no horizontal scrolling or console warnings/errors.
-7. Run catalogue-only discovery for five `cholera` works.
-8. Traverse exactly five works, inspect missing OCR as a nonfailure, and resume
-   from the same checkpoint after correcting real source-model variants.
-9. Build and start the Compose application, exercise root/health/status, and
-   run one containerized dry run to prove named-volume write permissions.
+#### Automated checks
 
-Why: mocked tests own repeatability. The small live run is compatibility
-evidence against the current source, not a test dependency or a performance
-benchmark.
+Every automated Wellcome request is mocked. Tests cover:
+
+- two-page catalogue pagination;
+- temporary retry behavior;
+- numeric and invalid `Retry-After` values;
+- permanent errors that must not retry;
+- local eligibility checking;
+- manifest and canvas order;
+- OCR line order;
+- pages with no OCR;
+- a broken referenced annotation URL;
+- dry-run and checkpoint behavior;
+- one-work failure while later works continue;
+- resume skipping and retrying;
+- fingerprint mismatch;
+- CLI validation; and
+- idle and saved API status.
+
+Why mock automated tests: they must be fast and repeatable even when Wellcome
+or the network is unavailable.
+
+#### Live checks
+
+After offline checks passed, we used a deliberately small live query:
+
+1. Discover five `cholera` works with dry-run.
+2. Traverse those five works.
+3. Inspect real source variants and add regression tests for them.
+4. Resume the matching checkpoint.
+5. Confirm the final status in the browser.
+
+Why only five: the goal was compatibility evidence, not bulk harvesting or a
+speed benchmark.
+
+#### Container checks
+
+We also built and started the Compose application, checked root/health/status,
+and ran one containerized dry-run. This proved that the unprivileged process
+can write status into the named volume.
 
 ## 5. File-by-file implementation review
 
-### 5.1 `core/config.py`
+### 5.1 `core/config.py` and `.env.example`
 
-Adds validated Wellcome request controls and `ingestion_state_directory` to
-the existing frozen settings object. Field defaults support zero-setup local
-development. Pydantic Settings maps environment variables to the same names,
-case-insensitively, and the root `.env` file remains supported.
+What: these files define and document the Wellcome request settings and state
+directory.
 
-`.env.example` lists every Phase 4 setting and its local default so deployment
-configuration is discoverable without reading Python source.
+Why: runtime policy can be changed through environment variables instead of
+editing source code.
+
+How: Pydantic loads, validates, and freezes the settings. `.env.example` shows
+every available name and default.
 
 ### 5.2 `sources/wellcome/models.py`
 
-Defines the narrow external JSON contract and the internal traversed work/page
-contract. External aliases match source names such as `workType`, `nextPage`,
-`@id`, `@type`, and `otherContent`. Tuples and frozen models make parsed source
-objects immutable.
+What: this file describes the parts of Wellcome and IIIF JSON that Phase 4
+uses, plus the page/work objects returned by traversal.
+
+Why: source data is checked at one boundary instead of spreading dictionary
+lookups throughout the code.
+
+How: aliases connect Python names to JSON names such as `workType`, `nextPage`,
+`@id`, `@type`, and `otherContent`. Parsed source objects are frozen so later
+code cannot silently change them.
 
 ### 5.3 `sources/wellcome/client.py`
 
-Owns source-specific HTTP behavior. Its small public surface is:
+What: this file communicates with Wellcome.
 
-- `fetch_catalogue_page()`;
-- `discover_works()`;
-- `fetch_manifest()`;
-- `fetch_annotation_list()`;
-- `traverse_work()`;
-- `retry_count` and `close()`.
+Its main operations are:
 
-Pure helpers isolate retry classification, `Retry-After` parsing, eligibility,
-manifest URL selection, and OCR-line filtering.
+- fetch one catalogue page;
+- discover eligible works;
+- fetch one IIIF manifest;
+- fetch one OCR annotation list; and
+- traverse one complete work.
+
+Small helper functions decide whether an error is temporary, parse
+`Retry-After`, check eligibility, find a manifest URL, and select OCR lines.
+
+Why: all Wellcome-specific request and traversal rules stay in one file.
 
 ### 5.4 `sources/wellcome/ingestion.py`
 
-Owns run behavior rather than HTTP details. `IngestionClient` is a Protocol, so
-orchestration tests use a deterministic fake client. `IngestionStateStore`
-owns JSON paths and replacement writes. `WellcomeIngestionRunner` owns the run
-state machine. `run_wellcome_ingestion()` is the production composition root.
+What: this file controls the complete run.
+
+| Part | Job |
+|---|---|
+| `IngestionClient` | Describes the client behavior the runner needs, which makes fake clients easy to use in tests |
+| `IngestionStateStore` | Reads and safely replaces status/checkpoint JSON |
+| `WellcomeIngestionRunner` | Controls discovery, sequential work processing, failure handling, and resume |
+| `run_wellcome_ingestion()` | Creates the real client and store, then starts the runner |
+
+Why separate this from `client.py`: HTTP rules and job-control rules change for
+different reasons and can be tested independently.
 
 ### 5.5 `cli.py`
 
-Adds a nested Typer application under `ingest`. CLI validation catches invalid
-option combinations before calling the runner, while runner validation keeps
-the rule intact for non-CLI callers.
+What: adds `ingest wellcome` under the existing Typer command group.
+
+Why: the CLI is the explicit way to start a source run. It validates terminal
+options and delegates the real work to the ingestion runner.
+
+The runner also validates important rules so a future non-CLI caller cannot
+bypass them.
 
 ### 5.6 `api/main.py`
 
-Adds the read-only status route before the frontend static mount. Dependency
-injection supplies settings, which lets tests point the route at temporary
-state without changing global files.
+What: adds the read-only status endpoint.
 
-### 5.7 `frontend/index.html`, `app.js`, and `styles.css`
+Why: the browser needs progress, but it should not read local files directly.
+FastAPI turns the saved model into a stable JSON response.
 
-The ingestion markup now has stable `data-ingestion-*` render targets. The
-JavaScript polls and renders the typed JSON shape defensively. The CSS retains
-the existing visual design while adapting panel headers and stage rows for
-small screens and clipping decorative overflow at the document boundary.
+Settings are supplied through FastAPI's dependency system. Tests can therefore
+point the endpoint at a temporary directory.
+
+### 5.7 `frontend/index.html`, `app.js`, `styles.css`, and `vite.config.js`
+
+What changed:
+
+- HTML gained named `data-ingestion-*` places for real values.
+- JavaScript polls and renders the status response.
+- CSS supports the real event content on desktop and small screens.
+- Vite forwards `/ingestion` requests during frontend development.
+
+Why: the existing Phase 3 view could be connected without rebuilding the
+whole frontend.
 
 ### 5.8 `Dockerfile` and `compose.yaml`
 
-The image now prepares the state directory before switching to UID 10001.
-Compose names the image `phase4` and attaches a persistent named volume. The
-one-service architecture and readiness health check remain unchanged.
+What changed:
+
+- the image creates a writable ingestion state folder;
+- Compose uses the Phase 4 image name; and
+- a named volume stores status and checkpoints.
+
+The application still uses one service and the same readiness check.
 
 ### 5.9 Tests and fixtures
 
-- `test_models.py` checks fixture parsing, ordering, ignored fields, strict
-  discriminators, and observed optional variants.
-- `test_client.py` checks request configuration, retries, pagination,
-  eligibility, traversal, missing OCR, and terminal source errors.
-- `test_ingestion.py` checks dry runs, checkpoints, failure isolation, resume,
-  and fingerprint protection.
-- `test_ingestion_status.py` checks idle and persisted API responses.
-- `test_cli.py` checks the nested command and its option contract.
+| File | Main behavior checked |
+|---|---|
+| `test_models.py` | JSON parsing, order, ignored fields, strict types, and real optional variants |
+| `test_client.py` | Request setup, retries, pagination, eligibility, traversal, missing OCR, and source failures |
+| `test_ingestion.py` | Dry-run, checkpoints, failure isolation, resume, and fingerprint protection |
+| `test_ingestion_status.py` | Idle and saved status API responses |
+| `test_cli.py` | Command options and validation |
 
-No automated test calls Wellcome.
+No automated test calls the live Wellcome service.
 
 ## 6. Operational guide
 
-### 6.1 Inspect command help
+### 6.1 Read the command help
 
 ```powershell
 uv run european-heritage-rag ingest wellcome --help
 ```
 
-### 6.2 Discover without manifests or OCR
+Use this first when you forget an option or its default.
+
+### 6.2 Discover without requesting book pages
 
 ```powershell
 uv run european-heritage-rag ingest wellcome --limit 5 --query cholera --dry-run
 ```
 
-Use this to verify catalogue filters and count eligible works. It updates the
-status file but deliberately leaves the checkpoint untouched.
+What it does: asks only the catalogue for five eligible works.
+
+What it does not do: request manifests, request OCR, or change the checkpoint.
 
 ### 6.3 Traverse a small run
 
@@ -487,8 +714,10 @@ status file but deliberately leaves the checkpoint untouched.
 uv run european-heritage-rag ingest wellcome --limit 5 --query cholera
 ```
 
-This requests catalogue pages, manifests, and referenced annotation lists.
-It records control state only; it does not build the Phase 5 corpus.
+What it does: discovers works, requests their manifests, follows canvases and
+OCR lists, and writes progress/checkpoint state.
+
+What it does not do: save the source JSON and OCR as the Phase 5 corpus.
 
 ### 6.4 Resume the same run
 
@@ -496,10 +725,10 @@ It records control state only; it does not build the Phase 5 corpus.
 uv run european-heritage-rag ingest wellcome --limit 5 --query cholera --resume
 ```
 
-Limit, normalized query, and language must match the checkpoint. Completed
-works are skipped; previously failed works are tried again.
+Use exactly the same limit, query, and language. Completed works are skipped.
+Failed or unfinished works are tried again.
 
-### 6.5 Override request policy through environment variables
+### 6.5 Change request settings
 
 PowerShell example:
 
@@ -509,7 +738,7 @@ $env:WELLCOME_MAX_ATTEMPTS = "5"
 uv run european-heritage-rag ingest wellcome --limit 5
 ```
 
-Useful configuration names are:
+Available Phase 4 environment variables:
 
 - `WELLCOME_CATALOGUE_BASE_URL`
 - `WELLCOME_USER_AGENT`
@@ -521,9 +750,9 @@ Useful configuration names are:
 - `WELLCOME_MAX_RETRY_WAIT_SECONDS`
 - `INGESTION_STATE_DIRECTORY`
 
-### 6.6 View status directly
+### 6.6 View progress
 
-Start the combined application:
+Build the frontend and start FastAPI:
 
 ```powershell
 pnpm --dir frontend build
@@ -532,14 +761,14 @@ uv run uvicorn european_heritage_rag.api.main:app
 
 Then open:
 
-- `http://127.0.0.1:8000/` for the dashboard;
-- `http://127.0.0.1:8000/ingestion/status` for raw status JSON;
-- `http://127.0.0.1:8000/docs` for the FastAPI schema.
+- `http://127.0.0.1:8000/` for the visual dashboard;
+- `http://127.0.0.1:8000/ingestion/status` for the status JSON; or
+- `http://127.0.0.1:8000/docs` for the API documentation.
 
-The API process and CLI must resolve the same state directory. With the default
-configuration, run both from the repository root.
+Important: the CLI and API must use the same ingestion state directory. With
+default settings, run both from the repository root.
 
-### 6.7 Run through Docker Compose
+### 6.7 Run with Docker Compose
 
 ```powershell
 docker compose up --detach --build --wait
@@ -547,35 +776,35 @@ docker compose exec api european-heritage-rag ingest wellcome --limit 5 --query 
 docker compose down
 ```
 
-Compose preserves the named ingestion volume when containers are replaced or
-`docker compose down` is used. Removing the named volume deletes its persisted
-status and checkpoint, so treat that as a deliberate cleanup operation.
+`docker compose down` removes the container and network but keeps the named
+volume. Deleting that volume would delete its checkpoint and status, so volume
+removal should always be intentional.
 
 ## 7. Verification evidence
 
-The Phase 4 closure gate was run on 2026-07-22.
+The Phase 4 completion checks ran on 2026-07-22.
 
-| Command or check | Property proved | Result |
+| Command or check | What it proved | Result |
 |---|---|---|
-| `uv sync --locked` | Locked backend dependency graph | Passed; 43 packages checked |
-| `uv run pytest` | Backend, client, orchestration, CLI, and API behavior | 53 tests passed |
+| `uv sync --locked` | Backend packages match the lockfile | Passed; 43 packages checked |
+| `uv run pytest` | Backend, source client, runner, CLI, and API behavior | 53 tests passed |
 | `uv run ruff check .` | Python lint rules | Passed |
 | `uv run ruff format --check .` | Python formatting | 22 files formatted |
 | `uv run mypy src` | Strict source type checking | Passed; 13 source files |
-| `pnpm --dir frontend build` | Production frontend bundle | Passed |
-| Desktop browser check | Real status render and console diagnostics | 5/5 works, 246 canvases, 14 missing OCR, 0 failures; no warnings/errors |
-| 390 px browser check | Responsive ingestion panel | No horizontal scrolling |
-| Five-work live smoke | Current Wellcome compatibility | 5 completed, 246 canvases, 14 without OCR, 0 retries, 0 failures |
-| `docker compose config --quiet` | Valid Compose model | Passed |
-| `docker compose build` | Phase 4 multi-stage image | Passed |
-| `docker compose up --detach --wait` | Container startup and readiness | Healthy |
-| `GET /` | Combined frontend delivery | HTTP 200 |
-| `GET /health/ready` | Container readiness API | HTTP 200, `status=ok` |
-| `GET /ingestion/status` | Idle state before first volume run | HTTP 200, `status=idle` |
-| Containerized one-work dry run | Network access and unprivileged volume writes | Passed; one work discovered |
-| `git diff --check` | Working diff whitespace | Passed |
+| `pnpm --dir frontend build` | Vite can create the production frontend | Passed |
+| Desktop browser check | The dashboard shows the real saved status | 5/5 works, 246 canvases, 14 missing OCR, 0 failures; no warnings/errors |
+| 390 px browser check | The ingestion view fits a small screen | No horizontal scrolling |
+| Five-work live check | The client works with current Wellcome responses | 5 complete, 246 canvases, 14 without OCR, 0 retries, 0 failures |
+| `docker compose config --quiet` | The Compose file is valid | Passed |
+| `docker compose build` | The Phase 4 image builds | Passed |
+| `docker compose up --detach --wait` | The container starts and becomes ready | Healthy |
+| `GET /` | The combined application serves the frontend | HTTP 200 |
+| `GET /health/ready` | The combined application serves readiness | HTTP 200, `status=ok` |
+| `GET /ingestion/status` | Status works before any volume run | HTTP 200, `status=idle` |
+| Container dry-run | The unprivileged user can write to the named volume | Passed; one work discovered |
+| `git diff --check` | The change set has no whitespace errors | Passed |
 
-Measured live run:
+The measured live run was:
 
 ```text
 Run ID: 6a16979c880b43debb7378dfce145762
@@ -590,74 +819,87 @@ Terminal failures: 0
 Final status: completed
 ```
 
-These numbers describe one bounded compatibility run. They are not retrieval,
-answer-quality, throughput, or catalogue-coverage metrics.
+What these numbers mean: this one small run completed successfully against the
+current source.
+
+What they do not mean: they do not prove catalogue-wide coverage, speed,
+retrieval quality, citation quality, or answer quality.
 
 ## 8. Troubleshooting
 
 ### Resume says the options do not match
 
-Use the same `--limit`, `--query`, and `--language` as the original run. Start
-a new run without `--resume` if you intentionally want different discovery
-options.
+Cause: limit, query, or language differs from the saved run.
+
+Action: use the original options, or omit `--resume` to deliberately start a
+new run.
 
 ### Resume says no checkpoint exists
 
-Dry runs do not create checkpoints. Run a non-dry ingestion first and ensure
-the CLI is using the expected `INGESTION_STATE_DIRECTORY`.
+Cause: no full run has created one, the state directory is different, or the
+only previous command was a dry-run.
+
+Action: run a normal ingestion and confirm `INGESTION_STATE_DIRECTORY`.
 
 ### A canvas has no OCR
 
-This is expected source variation. It increments `missing_ocr_pages` and keeps
-the work successful. A failed referenced OCR request is different: it records
-a work failure.
+Meaning: the canvas is valid, but no supported plain-text OCR was attached.
 
-### The dashboard remains idle while the CLI runs
+Result: `missing_ocr_pages` increases and the work can still succeed.
 
-Confirm the API and CLI use the same working directory or explicitly set the
-same absolute `INGESTION_STATE_DIRECTORY` for both processes.
+This is different from a referenced OCR URL returning an error. A failed URL
+is recorded as a work failure.
 
-### A retryable request keeps failing
+### The dashboard stays idle while the CLI runs
 
-The client stops after `WELLCOME_MAX_ATTEMPTS`. The terminal error is recorded
-against the work, and a later matching `--resume` can attempt that work again.
+Cause: the API and CLI are probably reading different relative directories.
 
-### The UI says progress is unavailable
+Action: run both from the repository root or give both the same absolute
+`INGESTION_STATE_DIRECTORY`.
 
-Check `GET /ingestion/status`, the API process, and browser console/network
-diagnostics. The UI intentionally keeps the last safe shape instead of
-inventing progress when polling fails.
+### A temporary request keeps failing
+
+The client stops after `WELLCOME_MAX_ATTEMPTS`. The final error is recorded for
+that work. A later matching `--resume` can try the work again.
+
+### The dashboard says progress is unavailable
+
+Check `/ingestion/status`, the API process, and the browser network/console
+output. The UI shows an honest unavailable state instead of inventing values.
 
 ## 9. Review summary
 
-Phase 4 is complete as a bounded Wellcome discovery and traversal layer.
+Phase 4 is complete. HeritageRAG can discover a small eligible source set,
+traverse its IIIF canvases, read available OCR in order, report progress, and
+resume at work level.
 
-Stable boundaries:
+What should remain stable:
 
-- Catalogue API filters plus local eligibility validation.
-- IIIF canvas order as the current page-like source order.
-- Exact OCR line preservation at ingestion time.
-- One reusable request policy for every source URL.
-- HTTP/source concerns separated from orchestration concerns.
-- Work-level atomic checkpoint and resume behavior.
-- CLI writes; API and browser read persisted status.
-- Offline fixtures and mocked HTTP tests as the regression baseline.
-- Sequential traversal until measurement justifies concurrency.
+- use the Wellcome API rather than scraping pages;
+- apply server filters and then validate eligibility locally;
+- use IIIF canvas order as the current page-like order;
+- preserve OCR lines exactly during ingestion;
+- use one request and retry policy for every source URL;
+- keep HTTP traversal separate from run control;
+- checkpoint after each work;
+- keep the CLI as writer and API/dashboard as readers;
+- keep automated tests offline; and
+- remain sequential until measurements justify concurrency.
 
-Known limitations to carry forward:
+Known limits:
 
-- Raw source data is not stored or replayable yet.
-- Resume repeats an interrupted work from its manifest.
-- File state supports one local writer, not distributed workers.
-- Printed page numbering is not normalized.
-- OCR is preserved but not cleaned.
-- Only English PDM online books are eligible.
-- Browser polling is not an automated end-to-end test suite.
-- `Retry-After` HTTP dates are not parsed.
+- source payloads and OCR are not stored yet;
+- an interrupted book starts again from its manifest;
+- JSON state expects one local writer;
+- printed page numbers are not normalized;
+- OCR is not cleaned;
+- only English PDM online books are accepted;
+- browser polling has no automated end-to-end test suite; and
+- HTTP-date `Retry-After` values are not parsed.
 
-Phase 5 should consume these source contracts and add immutable Bronze
-payloads, deterministic paths, checksums, acquisition metadata, and replay
-without changing the source responses.
+What Phase 5 should do next: store unchanged source payloads using stable paths,
+checksums, and acquisition metadata so later phases can replay ingestion
+without asking Wellcome again.
 
 ## 10. Official references
 

@@ -4,7 +4,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from pydantic import AnyHttpUrl
 
+from european_heritage_rag.pipeline.bronze_store import BronzeFilesystemStore
+from european_heritage_rag.pipeline.bronze_validation import validate_bronze_run
+from european_heritage_rag.sources.wellcome.client import RawResourceObserver
 from european_heritage_rag.sources.wellcome.ingestion import (
     IngestionCheckpoint,
     IngestionStateStore,
@@ -14,6 +18,7 @@ from european_heritage_rag.sources.wellcome.ingestion import (
 from european_heritage_rag.sources.wellcome.models import (
     CatalogueWork,
     CatalogueWorksPage,
+    RawWellcomeResource,
     TraversedPage,
     TraversedWork,
 )
@@ -45,15 +50,67 @@ class FakeIngestionClient:
         limit: int,
         query: str | None = None,
         language: str = "eng",
+        raw_resource_observer: RawResourceObserver | None = None,
     ) -> tuple[CatalogueWork, ...]:
         self.discovery_arguments = (limit, query, language)
-        return self._works[:limit]
+        works = self._works[:limit]
+        if raw_resource_observer is not None:
+            acquired_at = datetime.now(UTC)
+            for work in works:
+                raw_resource_observer(
+                    RawWellcomeResource(
+                        resource_type="catalogue_work",
+                        work_id=work.id,
+                        source_url=AnyHttpUrl("https://example.test/catalogue/works"),
+                        content=work.model_dump_json(by_alias=True).encode(),
+                        acquired_at=acquired_at,
+                        content_type="application/json",
+                    )
+                )
+        return works
 
     def traverse_work(self, work: CatalogueWork) -> TraversedWork:
         self.traversed_work_ids.append(work.id)
         result = self._results[work.id]
         if isinstance(result, Exception):
             raise result
+        return result
+
+    def traverse_work_with_resources(
+        self,
+        work: CatalogueWork,
+        *,
+        raw_resource_observer: RawResourceObserver | None = None,
+    ) -> TraversedWork:
+        result = self.traverse_work(work)
+        if raw_resource_observer is not None:
+            acquired_at = datetime.now(UTC)
+            raw_resource_observer(
+                RawWellcomeResource(
+                    resource_type="iiif_manifest",
+                    work_id=work.id,
+                    source_url=AnyHttpUrl(_MANIFEST_URL),
+                    content=(_FIXTURE_DIRECTORY / "iiif_manifest.json").read_bytes(),
+                    acquired_at=acquired_at,
+                    content_type="application/json",
+                )
+            )
+            raw_resource_observer(
+                RawWellcomeResource(
+                    resource_type="ocr_annotation_list",
+                    work_id=work.id,
+                    source_url=AnyHttpUrl(
+                        "https://iiif.example.org/annotations/page-1"
+                    ),
+                    content=(
+                        _FIXTURE_DIRECTORY / "ocr_annotation_list.json"
+                    ).read_bytes(),
+                    acquired_at=acquired_at,
+                    content_type="application/json",
+                    canvas_index=0,
+                    annotation_index=0,
+                )
+            )
         return result
 
 
@@ -217,3 +274,48 @@ def test_resume_rejects_changed_options(tmp_path: Path) -> None:
             query="sanitation",
             resume=True,
         )
+
+
+def test_run_persists_valid_bronze_and_resume_creates_no_duplicates(
+    tmp_path: Path,
+) -> None:
+    """A completed work should be replayable and idempotent from Bronze."""
+
+    work = fixture_work("bronze-work")
+    state_store = IngestionStateStore(tmp_path / "state")
+    bronze_store = BronzeFilesystemStore(tmp_path / "bronze")
+    runner = WellcomeIngestionRunner(
+        FakeIngestionClient(
+            (work,),
+            {work.id: traversed_work(work)},
+        ),
+        state_store,
+        bronze_store,
+    )
+
+    status = runner.run(limit=1, query="cholera")
+    assert status.run_id is not None
+    manifest = bronze_store.find_manifest(status.run_id)
+    assert manifest is not None
+    report = validate_bronze_run(bronze_store, manifest)
+    resource_paths = tuple(record.relative_path for record in manifest.resources)
+
+    assert report.is_valid
+    assert status.started_at is not None
+    assert manifest.identity.ingestion_date == status.started_at.astimezone(UTC).date()
+    assert manifest.completed_work_ids == ("bronze-work",)
+    assert len(manifest.resources) == 3
+
+    resumed = WellcomeIngestionRunner(
+        FakeIngestionClient((work,), {}),
+        state_store,
+        bronze_store,
+    ).run(limit=1, query="cholera", resume=True)
+    resumed_manifest = bronze_store.find_manifest(status.run_id)
+
+    assert resumed.status == "completed"
+    assert resumed_manifest is not None
+    assert (
+        tuple(record.relative_path for record in resumed_manifest.resources)
+        == resource_paths
+    )

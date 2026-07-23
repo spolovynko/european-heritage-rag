@@ -77,7 +77,7 @@
           </div>
           <div class="phase-row">
             <span class="status-dot status-dot--amber" aria-hidden="true"></span>
-            <span>Phase 4 source ingestion</span>
+            <span>Phase 5 Bronze data layer</span>
           </div>
         </div>
       </aside>
@@ -252,33 +252,51 @@
           <section class="view" data-view-panel="data" aria-labelledby="data-title" hidden>
             <div class="page-heading heading-with-actions">
               <div>
-                <p class="kicker">Intermediate records</p>
-                <h1 id="data-title">Data explorer</h1>
-                <p>Inspect sample metadata, provenance, and page-level OCR before indexing.</p>
+                <p class="kicker">Immutable source evidence</p>
+                <h1 id="data-title">Bronze explorer</h1>
+                <p>Inspect the exact Wellcome JSON captured by each ingestion run.</p>
               </div>
-              <span class="state-badge state-badge--sample">Sample records</span>
+              <span class="state-badge state-badge--ready">Live Bronze data</span>
             </div>
 
+            <article class="panel bronze-run-panel">
+              <div>
+                <label for="bronze-run-select">Ingestion run</label>
+                <select id="bronze-run-select" data-bronze-run-select>
+                  <option>Loading Bronze runs…</option>
+                </select>
+              </div>
+              <dl class="bronze-run-summary" data-bronze-run-summary>
+                <div><dt>Status</dt><dd>No run selected</dd></div>
+                <div><dt>Works</dt><dd>0 / 0</dd></div>
+                <div><dt>Resources</dt><dd>0</dd></div>
+                <div><dt>Failures</dt><dd>0</dd></div>
+              </dl>
+            </article>
+
+            <div class="bronze-failures" data-bronze-failures hidden></div>
+
             <div class="explorer-layout">
-              <aside class="panel record-browser" aria-label="Sample works">
+              <aside class="panel record-browser" aria-label="Bronze resources">
                 <div class="explorer-controls">
                   <label class="search-field">
                     <span aria-hidden="true">⌕</span>
-                    <span class="sr-only">Search sample works</span>
-                    <input type="search" placeholder="Search sample works" data-record-search />
+                    <span class="sr-only">Search Bronze resources</span>
+                    <input type="search" placeholder="Search work ID or path" data-record-search />
                   </label>
-                  <select aria-label="Filter by status" data-record-filter>
-                    <option value="all">All records</option>
-                    <option value="ready">Ready</option>
-                    <option value="review">Needs review</option>
+                  <select aria-label="Filter by resource type" data-record-filter>
+                    <option value="all">All resource types</option>
+                    <option value="catalogue_work">Catalogue works</option>
+                    <option value="iiif_manifest">IIIF manifests</option>
+                    <option value="ocr_annotation_list">OCR annotations</option>
                   </select>
                 </div>
-                <div class="record-count"><span data-record-count>4 works</span><span>Updated 8 min ago</span></div>
+                <div class="record-count"><span data-record-count>0 resources</span><span>Manifest inventory</span></div>
                 <div class="record-list" data-record-list></div>
                 <div class="record-empty" data-record-empty hidden>
                   <span aria-hidden="true">⌕</span>
-                  <strong>No matching works</strong>
-                  <p>Try another title or reset the filter.</p>
+                  <strong>No matching resources</strong>
+                  <p>Try another work ID, path, or resource type.</p>
                   <button class="text-button" type="button" data-reset-search>Reset search</button>
                 </div>
               </aside>
@@ -290,38 +308,34 @@
                 <div data-detail-content>
                   <div class="detail-heading">
                     <div>
-                      <p class="kicker">Selected work</p>
-                      <h2 data-detail-title></h2>
-                      <p data-detail-contributor></p>
+                      <p class="kicker">Selected raw resource</p>
+                      <h2 data-detail-title>Select a Bronze run</h2>
+                      <p data-detail-subtitle>The newest run is selected automatically.</p>
                     </div>
-                    <span class="state-badge" data-detail-status></span>
+                    <span class="state-badge state-badge--sample" data-detail-status>Raw JSON</span>
                   </div>
 
                   <dl class="metadata-grid">
-                    <div><dt>Work ID</dt><dd data-detail-id></dd></div>
-                    <div><dt>Published</dt><dd data-detail-year></dd></div>
-                    <div><dt>Language</dt><dd data-detail-language></dd></div>
-                    <div><dt>Rights</dt><dd data-detail-rights></dd></div>
-                    <div><dt>Pages</dt><dd data-detail-pages></dd></div>
-                    <div><dt>Source</dt><dd data-detail-source></dd></div>
+                    <div><dt>Resource ID</dt><dd data-detail-id>—</dd></div>
+                    <div><dt>Work ID</dt><dd data-detail-work-id>—</dd></div>
+                    <div><dt>Bytes</dt><dd data-detail-bytes>—</dd></div>
+                    <div><dt>Acquired</dt><dd data-detail-acquired>—</dd></div>
+                    <div><dt>SHA-256</dt><dd class="hash-value" data-detail-hash>—</dd></div>
+                    <div><dt>Source</dt><dd><a data-detail-source href="#" target="_blank" rel="noreferrer">—</a></dd></div>
                   </dl>
 
-                  <div class="ocr-panel">
+                  <div class="ocr-panel bronze-json-panel">
                     <div class="ocr-toolbar">
                       <div>
-                        <p class="kicker">OCR preview</p>
-                        <h3>Page <span data-detail-page></span></h3>
+                        <p class="kicker">Offline replay preview</p>
+                        <h3>Decoded stored JSON</h3>
                       </div>
-                      <div class="page-controls">
-                        <button type="button" aria-label="Previous OCR page" data-page-prev>←</button>
-                        <span><span data-page-current></span> / <span data-page-total></span></span>
-                        <button type="button" aria-label="Next OCR page" data-page-next>→</button>
-                      </div>
+                      <button class="text-button" type="button" data-copy-id>Copy resource ID</button>
                     </div>
-                    <blockquote data-detail-ocr></blockquote>
+                    <pre data-detail-json>Choose a resource to inspect its content.</pre>
                     <div class="provenance-row">
-                      <span><i></i> Page provenance preserved</span>
-                      <button class="text-button" type="button" data-copy-id>Copy work ID</button>
+                      <span><i></i> Hash and source URL preserved in run manifest</span>
+                      <span data-detail-path>No file selected</span>
                     </div>
                   </div>
                 </div>

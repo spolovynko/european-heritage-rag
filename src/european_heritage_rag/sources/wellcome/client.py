@@ -1,11 +1,14 @@
 """HTTP client for the Wellcome Collection APIs."""
 
+import json
 import time
 from collections.abc import Callable, Mapping
+from datetime import UTC, datetime
 from types import TracebackType
 from typing import Self
 
 import httpx2
+from pydantic import AnyHttpUrl
 from tenacity import (
     RetryCallState,
     Retrying,
@@ -20,11 +23,13 @@ from european_heritage_rag.sources.wellcome.models import (
     CatalogueWorksPage,
     IiifManifest,
     OcrAnnotationList,
+    RawWellcomeResource,
     TraversedPage,
     TraversedWork,
 )
 
 _RETRYABLE_STATUS_CODES = frozenset({408, 429, 500, 502, 503, 504})
+RawResourceObserver = Callable[[RawWellcomeResource], None]
 
 
 class WellcomeStructureError(ValueError):
@@ -190,13 +195,31 @@ class WellcomeClient:
     ) -> CatalogueWorksPage:
         """Retrieve and validate one catalogue results page."""
 
+        page, _, _ = self._fetch_catalogue_page_with_response(
+            url=url,
+            params=params,
+        )
+        return page
+
+    def _fetch_catalogue_page_with_response(
+        self,
+        *,
+        url: str = "works",
+        params: Mapping[str, str | int] | None = None,
+    ) -> tuple[CatalogueWorksPage, httpx2.Response, datetime]:
+        """Return one parsed page together with its exact HTTP response."""
+
         response = self._retrying(
             self._get,
             url,
             params=params,
         )
-
-        return CatalogueWorksPage.model_validate_json(response.content)
+        acquired_at = datetime.now(UTC)
+        return (
+            CatalogueWorksPage.model_validate_json(response.content),
+            response,
+            acquired_at,
+        )
 
     def discover_works(
         self,
@@ -204,6 +227,7 @@ class WellcomeClient:
         limit: int,
         query: str | None = None,
         language: str = "eng",
+        raw_resource_observer: RawResourceObserver | None = None,
     ) -> tuple[CatalogueWork, ...]:
         """Discover eligible works in catalogue order up to a fixed limit."""
 
@@ -225,14 +249,33 @@ class WellcomeClient:
         if query:
             params["query"] = query
 
-        page = self.fetch_catalogue_page(params=params)
+        page, response, acquired_at = self._fetch_catalogue_page_with_response(
+            params=params
+        )
         discovered: list[CatalogueWork] = []
 
         while True:
-            for work in page.results:
+            raw_results = _raw_catalogue_results(response)
+            if len(raw_results) != len(page.results):
+                raise WellcomeStructureError(
+                    "catalogue raw and validated result counts do not match"
+                )
+
+            for work, raw_content in zip(page.results, raw_results, strict=True):
                 if not is_eligible_work(work, language=language):
                     continue
 
+                if raw_resource_observer is not None:
+                    raw_resource_observer(
+                        RawWellcomeResource(
+                            resource_type="catalogue_work",
+                            work_id=work.id,
+                            source_url=AnyHttpUrl(str(response.url)),
+                            content=raw_content,
+                            acquired_at=acquired_at,
+                            content_type=response.headers.get("content-type"),
+                        )
+                    )
                 discovered.append(work)
                 if len(discovered) == limit:
                     return tuple(discovered)
@@ -240,7 +283,9 @@ class WellcomeClient:
             if page.next_page is None:
                 return tuple(discovered)
 
-            page = self.fetch_catalogue_page(url=str(page.next_page))
+            page, response, acquired_at = self._fetch_catalogue_page_with_response(
+                url=str(page.next_page)
+            )
 
     def fetch_manifest(self, url: str) -> IiifManifest:
         """Retrieve and validate one IIIF Presentation 2 manifest."""
@@ -257,13 +302,40 @@ class WellcomeClient:
     def traverse_work(self, work: CatalogueWork) -> TraversedWork:
         """Retrieve a work's manifest and reconstruct page OCR in source order."""
 
+        return self.traverse_work_with_resources(work)
+
+    def traverse_work_with_resources(
+        self,
+        work: CatalogueWork,
+        *,
+        raw_resource_observer: RawResourceObserver | None = None,
+    ) -> TraversedWork:
+        """Traverse one work while exposing source bytes before validation."""
+
         manifest_url = manifest_url_for(work)
         if manifest_url is None:
             raise WellcomeStructureError(
                 f"work {work.id} has no public-domain IIIF Presentation location"
             )
 
-        manifest = self.fetch_manifest(manifest_url)
+        manifest_response = self._retrying(
+            self._get,
+            manifest_url,
+            params=None,
+        )
+        manifest_acquired_at = datetime.now(UTC)
+        if raw_resource_observer is not None:
+            raw_resource_observer(
+                RawWellcomeResource(
+                    resource_type="iiif_manifest",
+                    work_id=work.id,
+                    source_url=AnyHttpUrl(str(manifest_response.url)),
+                    content=manifest_response.content,
+                    acquired_at=manifest_acquired_at,
+                    content_type=manifest_response.headers.get("content-type"),
+                )
+            )
+        manifest = IiifManifest.model_validate_json(manifest_response.content)
         if not manifest.sequences:
             raise WellcomeStructureError(
                 f"manifest for work {work.id} has no default sequence"
@@ -273,9 +345,32 @@ class WellcomeClient:
         for canvas_index, canvas in enumerate(manifest.sequences[0].canvases):
             lines: list[str] = []
 
-            for annotation_reference in canvas.other_content:
-                annotation_list = self.fetch_annotation_list(
-                    str(annotation_reference.id)
+            for annotation_index, annotation_reference in enumerate(
+                canvas.other_content
+            ):
+                annotation_response = self._retrying(
+                    self._get,
+                    str(annotation_reference.id),
+                    params=None,
+                )
+                annotation_acquired_at = datetime.now(UTC)
+                if raw_resource_observer is not None:
+                    raw_resource_observer(
+                        RawWellcomeResource(
+                            resource_type="ocr_annotation_list",
+                            work_id=work.id,
+                            source_url=AnyHttpUrl(str(annotation_response.url)),
+                            content=annotation_response.content,
+                            acquired_at=annotation_acquired_at,
+                            content_type=annotation_response.headers.get(
+                                "content-type"
+                            ),
+                            canvas_index=canvas_index,
+                            annotation_index=annotation_index,
+                        )
+                    )
+                annotation_list = OcrAnnotationList.model_validate_json(
+                    annotation_response.content
                 )
                 lines.extend(ocr_lines_from(annotation_list))
 
@@ -326,3 +421,24 @@ class WellcomeClient:
         """Count each retry immediately before its wait is applied."""
 
         self._retry_count += 1
+
+
+def _raw_catalogue_results(response: httpx2.Response) -> tuple[bytes, ...]:
+    """Losslessly decode selected work objects without using narrow models."""
+
+    payload = json.loads(response.content)
+    if not isinstance(payload, dict):
+        raise WellcomeStructureError("catalogue response is not a JSON object")
+    results = payload.get("results")
+    if not isinstance(results, list):
+        raise WellcomeStructureError(
+            "catalogue response does not contain a results list"
+        )
+    return tuple(
+        json.dumps(
+            result,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode()
+        for result in results
+    )

@@ -6,13 +6,17 @@ from pathlib import Path
 import httpx2
 import pytest
 import respx
+from pydantic import ValidationError
 
 from european_heritage_rag.core.config import AppSettings
 from european_heritage_rag.sources.wellcome.client import (
     WellcomeClient,
     WellcomeStructureError,
 )
-from european_heritage_rag.sources.wellcome.models import CatalogueWorksPage
+from european_heritage_rag.sources.wellcome.models import (
+    CatalogueWorksPage,
+    RawWellcomeResource,
+)
 
 _FIXTURE_DIRECTORY = Path(__file__).parents[2] / "fixtures" / "wellcome"
 
@@ -285,6 +289,45 @@ def test_discover_works_rejects_non_public_domain_location(
     assert len(route.calls) == 1
 
 
+def test_discovery_exposes_lossless_selected_work_json(
+    httpx2_mock: respx.Router,
+) -> None:
+    """Bronze capture must preserve fields outside the narrow source model."""
+
+    page = json.loads(
+        (_FIXTURE_DIRECTORY / "catalogue_page.json").read_text(encoding="utf-8")
+    )
+    page["results"][0]["futureSourceField"] = {
+        "preserved": True,
+        "label": "not used by Phase 4",
+    }
+    httpx2_mock.get(
+        "https://api.wellcomecollection.org/catalogue/v2/works",
+        params={
+            "workType": "a",
+            "availabilities": "online",
+            "items.locations.license": "pdm",
+            "items.locations.locationType": "iiif-presentation",
+            "languages": "eng",
+            "include": "items,languages",
+            "pageSize": "1",
+        },
+    ).respond(json=page)
+    captured: list[RawWellcomeResource] = []
+
+    with WellcomeClient(AppSettings(_env_file=None)) as client:
+        works = client.discover_works(
+            limit=1,
+            raw_resource_observer=captured.append,
+        )
+
+    raw_work = json.loads(captured[0].content)
+    assert works[0].id == "xpxuaxuf"
+    assert captured[0].resource_type == "catalogue_work"
+    assert captured[0].work_id == "xpxuaxuf"
+    assert raw_work["futureSourceField"]["preserved"] is True
+
+
 def test_traverse_work_preserves_canvas_and_ocr_order(
     httpx2_mock: respx.Router,
 ) -> None:
@@ -327,6 +370,66 @@ def test_traverse_work_preserves_canvas_and_ocr_order(
     assert traversed.pages[0].text == "CHOLERA.\nPRACTICAL OBSERVATIONS"
     assert traversed.pages[1].annotation_list_urls == ()
     assert traversed.pages[1].text is None
+
+
+def test_traversal_exposes_exact_manifest_and_annotation_bytes(
+    httpx2_mock: respx.Router,
+) -> None:
+    """Validated IIIF payloads should remain available for Bronze storage."""
+
+    work = CatalogueWorksPage.model_validate_json(
+        (_FIXTURE_DIRECTORY / "catalogue_page.json").read_text(encoding="utf-8")
+    ).results[0]
+    manifest_url = "https://iiif.wellcomecollection.org/presentation/v2/b28041136"
+    annotation_url = (
+        "https://iiif.wellcomecollection.org/annotations/v2/"
+        "b28041136/b28041136_0001.jp2/line"
+    )
+    manifest_content = (_FIXTURE_DIRECTORY / "iiif_manifest.json").read_bytes()
+    annotation_content = (_FIXTURE_DIRECTORY / "ocr_annotation_list.json").read_bytes()
+    httpx2_mock.get(manifest_url).respond(content=manifest_content)
+    httpx2_mock.get(annotation_url).respond(content=annotation_content)
+    captured: list[RawWellcomeResource] = []
+
+    with WellcomeClient(AppSettings(_env_file=None)) as client:
+        client.traverse_work_with_resources(
+            work,
+            raw_resource_observer=captured.append,
+        )
+
+    assert tuple(resource.resource_type for resource in captured) == (
+        "iiif_manifest",
+        "ocr_annotation_list",
+    )
+    assert captured[0].content == manifest_content
+    assert captured[1].content == annotation_content
+    assert captured[1].canvas_index == 0
+    assert captured[1].annotation_index == 0
+
+
+def test_traversal_exposes_invalid_manifest_before_validation(
+    httpx2_mock: respx.Router,
+) -> None:
+    """A malformed source response should still be available for diagnosis."""
+
+    work = CatalogueWorksPage.model_validate_json(
+        (_FIXTURE_DIRECTORY / "catalogue_page.json").read_text(encoding="utf-8")
+    ).results[0]
+    manifest_url = "https://iiif.wellcomecollection.org/presentation/v2/b28041136"
+    invalid_content = b'{"unexpected":true}'
+    httpx2_mock.get(manifest_url).respond(content=invalid_content)
+    captured: list[RawWellcomeResource] = []
+
+    with WellcomeClient(AppSettings(_env_file=None)) as client:
+        with pytest.raises(ValidationError):
+            client.traverse_work_with_resources(
+                work,
+                raw_resource_observer=captured.append,
+            )
+
+    assert len(captured) == 1
+    assert captured[0].resource_type == "iiif_manifest"
+    assert captured[0].content == invalid_content
 
 
 def test_traverse_work_treats_referenced_ocr_error_as_failure(

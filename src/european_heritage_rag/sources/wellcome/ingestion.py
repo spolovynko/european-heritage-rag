@@ -3,17 +3,38 @@
 import hashlib
 import json
 from datetime import UTC, datetime
+from importlib.metadata import version
 from pathlib import Path
 from typing import Literal, Protocol
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+import httpx2
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field
 
 from european_heritage_rag.core.config import AppSettings
-from european_heritage_rag.sources.wellcome.client import WellcomeClient
+from european_heritage_rag.pipeline.bronze import (
+    BronzeResourceIdentity,
+    BronzeResourceType,
+    BronzeRunIdentity,
+    BronzeRunStatus,
+    WellcomeBronzeParameters,
+)
+from european_heritage_rag.pipeline.bronze_run import BronzeRunRecorder
+from european_heritage_rag.pipeline.bronze_store import BronzeFilesystemStore
+from european_heritage_rag.sources.wellcome.client import (
+    RawResourceObserver,
+    WellcomeClient,
+    manifest_url_for,
+)
 from european_heritage_rag.sources.wellcome.models import (
     CatalogueWork,
+    RawWellcomeResource,
     TraversedWork,
+)
+
+_DISTRIBUTION_NAME = "european-heritage-rag"
+_DEFAULT_CATALOGUE_BASE_URL = AnyHttpUrl(
+    "https://api.wellcomecollection.org/catalogue/v2/"
 )
 
 RunStatus = Literal[
@@ -92,11 +113,20 @@ class IngestionClient(Protocol):
         limit: int,
         query: str | None = None,
         language: str = "eng",
+        raw_resource_observer: RawResourceObserver | None = None,
     ) -> tuple[CatalogueWork, ...]:
         """Discover eligible works."""
 
     def traverse_work(self, work: CatalogueWork) -> TraversedWork:
         """Traverse one discovered work."""
+
+    def traverse_work_with_resources(
+        self,
+        work: CatalogueWork,
+        *,
+        raw_resource_observer: RawResourceObserver | None = None,
+    ) -> TraversedWork:
+        """Traverse one work while exposing raw payloads before validation."""
 
 
 class IngestionStateStore:
@@ -175,9 +205,16 @@ class WellcomeIngestionRunner:
         self,
         client: IngestionClient,
         state_store: IngestionStateStore,
+        bronze_store: BronzeFilesystemStore | None = None,
+        *,
+        pipeline_version: str = "0.1.0",
+        catalogue_base_url: AnyHttpUrl = _DEFAULT_CATALOGUE_BASE_URL,
     ) -> None:
         self._client = client
         self._state_store = state_store
+        self._bronze_store = bronze_store
+        self._pipeline_version = pipeline_version
+        self._catalogue_base_url = catalogue_base_url
 
     def run(
         self,
@@ -209,6 +246,30 @@ class WellcomeIngestionRunner:
         )
         completed_work_ids = set(checkpoint.completed_work_ids)
         failures = dict(checkpoint.failures)
+        bronze_recorder: BronzeRunRecorder | None = None
+
+        if not dry_run and self._bronze_store is not None:
+            now = datetime.now(UTC)
+            bronze_recorder = BronzeRunRecorder.start(
+                self._bronze_store,
+                identity=BronzeRunIdentity(
+                    ingestion_date=checkpoint.started_at.astimezone(UTC).date(),
+                    run_id=checkpoint.run_id,
+                ),
+                parameters=WellcomeBronzeParameters(
+                    limit=limit,
+                    query=normalized_query,
+                    language="eng",
+                ),
+                catalogue_base_url=self._catalogue_base_url,
+                pipeline_version=self._pipeline_version,
+                started_at=checkpoint.started_at,
+                now=now,
+                resume=resume,
+            )
+            if resume:
+                completed_work_ids = set(bronze_recorder.manifest.completed_work_ids)
+                failures = _active_bronze_failures(bronze_recorder)
 
         status = IngestionStatus(
             status="running",
@@ -219,8 +280,16 @@ class WellcomeIngestionRunner:
             dry_run=dry_run,
             resumed=resume,
             works_completed=len(completed_work_ids),
-            pages_downloaded=checkpoint.pages_downloaded,
-            missing_ocr_pages=checkpoint.missing_ocr_pages,
+            pages_downloaded=(
+                bronze_recorder.manifest.canvas_count
+                if bronze_recorder is not None
+                else checkpoint.pages_downloaded
+            ),
+            missing_ocr_pages=(
+                bronze_recorder.manifest.missing_ocr_page_count
+                if bronze_recorder is not None
+                else checkpoint.missing_ocr_pages
+            ),
             retry_count=checkpoint.retry_count,
             failure_count=len(failures),
             failures=failures,
@@ -236,11 +305,19 @@ class WellcomeIngestionRunner:
             self._state_store.save_checkpoint(checkpoint)
 
         try:
-            works = self._client.discover_works(
-                limit=limit,
-                query=normalized_query,
-                language=language,
-            )
+            if bronze_recorder is None:
+                works = self._client.discover_works(
+                    limit=limit,
+                    query=normalized_query,
+                    language=language,
+                )
+            else:
+                works = self._client.discover_works(
+                    limit=limit,
+                    query=normalized_query,
+                    language=language,
+                    raw_resource_observer=_bronze_observer(bronze_recorder),
+                )
         except Exception as error:
             status.status = "failed"
             status.finished_at = datetime.now(UTC)
@@ -251,9 +328,27 @@ class WellcomeIngestionRunner:
                 level="error",
                 message=f"Discovery failed: {_error_message(error)}",
             )
+            if bronze_recorder is not None:
+                now = datetime.now(UTC)
+                bronze_recorder.record_failure(
+                    work_id=None,
+                    resource_type=None,
+                    source_url=_error_source_url(
+                        error,
+                        fallback=self._catalogue_base_url,
+                    ),
+                    error=error,
+                    now=now,
+                )
+                bronze_recorder.finish(BronzeRunStatus.FAILED, now=now)
             raise
 
         status.works_discovered = len(works)
+        if bronze_recorder is not None:
+            bronze_recorder.record_discovery(
+                len(works),
+                now=datetime.now(UTC),
+            )
         status.retry_count = checkpoint.retry_count + self._client.retry_count
         self._record_event(
             status,
@@ -291,9 +386,32 @@ class WellcomeIngestionRunner:
             )
 
             try:
-                traversed = self._client.traverse_work(work)
+                if bronze_recorder is None:
+                    traversed = self._client.traverse_work(work)
+                else:
+                    traversed = self._client.traverse_work_with_resources(
+                        work,
+                        raw_resource_observer=_bronze_observer(bronze_recorder),
+                    )
             except Exception as error:
                 failures[work.id] = _error_message(error)
+                if bronze_recorder is not None:
+                    fallback_url = manifest_url_for(work)
+                    bronze_recorder.record_failure(
+                        work_id=work.id,
+                        resource_type=_failed_resource_type(
+                            error,
+                            fallback_manifest_url=fallback_url,
+                        ),
+                        source_url=_error_source_url(
+                            error,
+                            fallback=AnyHttpUrl(
+                                fallback_url or str(self._catalogue_base_url)
+                            ),
+                        ),
+                        error=error,
+                        now=datetime.now(UTC),
+                    )
                 status.failures = dict(failures)
                 status.failure_count = len(failures)
                 status.retry_count = checkpoint.retry_count + self._client.retry_count
@@ -309,6 +427,13 @@ class WellcomeIngestionRunner:
                 status.pages_downloaded += len(traversed.pages)
                 missing_pages = sum(page.text is None for page in traversed.pages)
                 status.missing_ocr_pages += missing_pages
+                if bronze_recorder is not None:
+                    bronze_recorder.record_work_success(
+                        work.id,
+                        canvas_count=len(traversed.pages),
+                        missing_ocr_page_count=missing_pages,
+                        now=datetime.now(UTC),
+                    )
                 status.works_completed = len(completed_work_ids)
                 status.retry_count = checkpoint.retry_count + self._client.retry_count
                 status.failures = dict(failures)
@@ -339,6 +464,15 @@ class WellcomeIngestionRunner:
         status.current_work_title = None
         status.status = "completed_with_failures" if failures else "completed"
         status.finished_at = datetime.now(UTC)
+        if bronze_recorder is not None:
+            bronze_recorder.finish(
+                (
+                    BronzeRunStatus.COMPLETED_WITH_FAILURES
+                    if failures
+                    else BronzeRunStatus.COMPLETED
+                ),
+                now=status.finished_at,
+            )
         self._record_event(
             status,
             level="warning" if failures else "info",
@@ -427,8 +561,15 @@ def run_wellcome_ingestion(
     """Construct production dependencies and run Wellcome ingestion."""
 
     state_store = IngestionStateStore(settings.ingestion_state_directory)
+    bronze_store = BronzeFilesystemStore(settings.bronze_data_directory)
     with WellcomeClient(settings) as client:
-        runner = WellcomeIngestionRunner(client, state_store)
+        runner = WellcomeIngestionRunner(
+            client,
+            state_store,
+            bronze_store,
+            pipeline_version=version(_DISTRIBUTION_NAME),
+            catalogue_base_url=settings.wellcome_catalogue_base_url,
+        )
         return runner.run(
             limit=limit,
             query=query,
@@ -441,3 +582,63 @@ def run_wellcome_ingestion(
 def _error_message(error: Exception) -> str:
     message = str(error).strip()
     return f"{type(error).__name__}: {message}" if message else type(error).__name__
+
+
+def _bronze_observer(
+    recorder: BronzeRunRecorder,
+) -> RawResourceObserver:
+    def record(raw: RawWellcomeResource) -> None:
+        recorder.record_resource(
+            resource=BronzeResourceIdentity(
+                resource_type=BronzeResourceType(raw.resource_type),
+                work_id=raw.work_id,
+                source_url=raw.source_url,
+                canvas_index=raw.canvas_index,
+                annotation_index=raw.annotation_index,
+            ),
+            content=raw.content,
+            acquired_at=raw.acquired_at,
+            content_type=raw.content_type,
+            now=datetime.now(UTC),
+        )
+
+    return record
+
+
+def _error_source_url(
+    error: Exception,
+    *,
+    fallback: AnyHttpUrl,
+) -> AnyHttpUrl:
+    if isinstance(error, httpx2.HTTPError):
+        return AnyHttpUrl(str(error.request.url))
+    return fallback
+
+
+def _failed_resource_type(
+    error: Exception,
+    *,
+    fallback_manifest_url: str | None,
+) -> BronzeResourceType | None:
+    if not isinstance(error, httpx2.HTTPError):
+        return (
+            BronzeResourceType.IIIF_MANIFEST
+            if fallback_manifest_url is not None
+            else None
+        )
+    failed_url = str(error.request.url)
+    if fallback_manifest_url is not None and failed_url == fallback_manifest_url:
+        return BronzeResourceType.IIIF_MANIFEST
+    return BronzeResourceType.OCR_ANNOTATION_LIST
+
+
+def _active_bronze_failures(
+    recorder: BronzeRunRecorder,
+) -> dict[str, str]:
+    failures: dict[str, str] = {}
+    for failure in recorder.manifest.failures:
+        if failure.resolved_at is not None:
+            continue
+        key = failure.work_id or "discovery"
+        failures[key] = f"{failure.error_type}: {failure.message}"
+    return failures

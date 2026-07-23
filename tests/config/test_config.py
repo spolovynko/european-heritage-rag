@@ -24,6 +24,7 @@ _SETTINGS_ENVIRONMENT_VARIABLES = (
     "WELLCOME_MAX_ATTEMPTS",
     "WELLCOME_MAX_RETRY_WAIT_SECONDS",
     "INGESTION_STATE_DIRECTORY",
+    "BRONZE_DATA_DIRECTORY",
 )
 
 
@@ -54,6 +55,7 @@ def test_settings_use_safe_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.wellcome_max_attempts == 4
     assert settings.wellcome_max_retry_wait_seconds == 8.0
     assert settings.ingestion_state_directory == Path("var/ingestion")
+    assert settings.bronze_data_directory == Path("data/bronze")
 
 
 def test_environment_variables_override_defaults(
@@ -75,6 +77,7 @@ def test_environment_variables_override_defaults(
     monkeypatch.setenv("WELLCOME_MAX_ATTEMPTS", "2")
     monkeypatch.setenv("WELLCOME_MAX_RETRY_WAIT_SECONDS", "4.5")
     monkeypatch.setenv("INGESTION_STATE_DIRECTORY", "var/test-ingestion")
+    monkeypatch.setenv("BRONZE_DATA_DIRECTORY", "data/test-bronze")
 
     settings = AppSettings(_env_file=None)
 
@@ -91,6 +94,7 @@ def test_environment_variables_override_defaults(
     assert settings.wellcome_max_attempts == 2
     assert settings.wellcome_max_retry_wait_seconds == 4.5
     assert settings.ingestion_state_directory == Path("var/test-ingestion")
+    assert settings.bronze_data_directory == Path("data/test-bronze")
 
 
 def test_invalid_environment_is_rejected(

@@ -9,6 +9,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, status
 from fastapi.staticfiles import StaticFiles
 
+from european_heritage_rag.api.bronze import router as bronze_router
 from european_heritage_rag.api.contracts import HealthResponse, ReadinessResponse
 from european_heritage_rag.core.config import AppSettings, get_settings
 from european_heritage_rag.core.logging import configure_logging, get_logger
@@ -112,6 +113,8 @@ def create_app(
         tags=["ingestion"],
         summary="Get the latest Wellcome ingestion status",
     )
+
+    application.include_router(bronze_router)
 
     if frontend_directory.is_dir():
         application.mount(

@@ -1,8 +1,30 @@
 """Typed models for Wellcome catalogue and IIIF source responses."""
 
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Literal
 
 from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field
+
+RawWellcomeResourceType = Literal[
+    "catalogue_work",
+    "iiif_manifest",
+    "ocr_annotation_list",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class RawWellcomeResource:
+    """One validated source payload before any Silver transformation."""
+
+    resource_type: RawWellcomeResourceType
+    work_id: str
+    source_url: AnyHttpUrl
+    content: bytes
+    acquired_at: datetime
+    content_type: str | None
+    canvas_index: int | None = None
+    annotation_index: int | None = None
 
 
 class WellcomeSourceModel(BaseModel):

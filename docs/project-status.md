@@ -2,101 +2,99 @@
 
 ## Current state
 
-- Last completed phase: Phase 4 - Wellcome discovery and ingestion client
-- Active phase: Phase 5 - Bronze data layer
+- Last completed phase: Phase 5 — Bronze data layer
+- Next phase: Phase 6 — Silver normalization and OCR cleaning
 - Current branch: `main`
-- Persisted corpus size: 0 works; Phase 4 traverses source data but does not
-  retain Bronze payloads
-- Last bounded source smoke test: 5/5 works completed, 246 canvases traversed,
-  14 canvases without OCR, 0 retry waits, and 0 terminal failures
+- Persisted local Bronze corpus: 5 works and 310 immutable resources from the
+  verified `cholera` acceptance run
+- Live run ID: `0e96cc69c1cf4124bf61e1bf2242a4ca`
 - Active index version: None
-- Last successful closure gate: the complete Phase 4 Python, frontend, browser,
-  live-source, and container verification passed on 2026-07-22
+- Last successful closure gate: complete Phase 5 Python, frontend, live-source,
+  browser, and container verification on 2026-07-23
 
 ## Completed capabilities
 
-### Product and evidence boundary
+### Product, environment, and browser foundation
 
-- Defined the product statement, user personas, initial English public-domain
-  Wellcome book scope, supported question types, and unanswerable cases.
-- Defined substantial claims, page-level evidence, valid citations, partial
-  answers, and abstention behavior.
-- Separated retrieval-quality goals from answer-quality goals and recorded
-  measurable targets as future goals rather than achieved metrics.
-- Recorded the deterministic two-step RAG baseline in ADR-0001.
-
-### Environment and delivery foundation
-
-- Established Python 3.12, `uv`, a root `src` layout, typed Pydantic settings,
-  structured logging, FastAPI liveness/readiness, a Typer CLI, and automated
-  Ruff/mypy/pytest checks.
-- Added a reproducible multi-stage image and one-service Docker Compose runtime
-  under an unprivileged user.
-- Recorded the environment and repository choices in ADR-0002.
-
-### Browser application foundation
-
-- Added a responsive browser-native HTML/CSS/JavaScript application built with
-  Vite and a locked pnpm dependency graph.
-- Served the Vite production build from FastAPI while preserving API routes and
-  backend startup without frontend assets.
-- Connected system status to `/health/ready` through a same-origin relative
-  path.
-- Added chat, ingestion, data, retrieval, and evaluation workspaces with clear
-  demonstration boundaries.
-- Recorded this delivery decision in ADR-0003.
+- The product scope, evidence contract, supported questions, abstention rules,
+  and future quality targets are documented.
+- Python 3.12, `uv`, typed settings, structured logging, FastAPI health routes,
+  Typer CLI, Ruff, mypy, pytest, Vite, pnpm, Docker, and Compose are reproducible.
+- A responsive browser-native diagnostic application is built with same-origin
+  API calls and served by FastAPI.
 
 ### Wellcome discovery and traversal
 
-- Added validated settings for the catalogue URL, User-Agent, four timeouts,
-  retry attempts/waits, and ingestion state directory. Environment variables
-  can override every default.
-- Added narrow tolerant Pydantic models for catalogue pages, works, digital
-  locations, IIIF Presentation 2 manifests, canvases, OCR annotation lists,
-  traversed pages, and traversed works.
-- Added an offline fixture set for catalogue, manifest, and OCR shapes,
-  including observed optional physical-location and picture-annotation
-  variants.
-- Added a reusable `httpx2` client with redirects, connection pooling, bounded
-  timeouts, retry classification, capped exponential backoff, numeric
-  `Retry-After`, and retry counting.
-- Added server filters and local validation for English, online,
-  public-domain-marked books with an IIIF Presentation location.
-- Added source-order pagination, manifest selection, first-sequence canvas
-  traversal, ordered annotation retrieval, and exact OCR line preservation.
-- Treats missing OCR as a visible nonfailure and failed referenced resources as
-  terminal work errors.
-- Added sequential run orchestration with per-work failure isolation, atomic
-  JSON status, work-granular checkpoints, option fingerprints, dry-run, and
-  resume.
-- Added `european-heritage-rag ingest wellcome` with `--limit`, `--query`,
-  `--language`, `--resume`, and `--dry-run`.
-- Added `GET /ingestion/status` and connected the ingestion dashboard to it
-  with safe three-second polling.
-- Added a persistent Compose volume for status and checkpoints.
-- Recorded the source strategy in ADR-0004 and added the detailed Phase 4
-  building guide.
+- A narrow tolerant Wellcome catalogue and IIIF client discovers English,
+  online, Public Domain Mark books in stable source order.
+- HTTP calls use bounded timeouts, retry classification, capped exponential
+  backoff, and retry accounting.
+- Typed traversal preserves ordered OCR lines, treats missing OCR as visible
+  nonfailure state, and isolates terminal failures per work.
+- Work-level checkpoints, matching resume, atomic status, CLI ingestion, status
+  API, and dashboard polling are operational.
+
+### Bronze data layer
+
+- `BRONZE_DATA_DIRECTORY` configures the generated corpus root and defaults to
+  `data/bronze`.
+- Strict immutable Pydantic contracts define run identity, deterministic
+  resource identity/path, acquisition parameters, resource receipts, failure
+  history, and whole-manifest consistency.
+- The filesystem store writes raw resources through synchronized temporary
+  siblings, exposes only complete files, calculates SHA-256, recognizes
+  identical content, and rejects changed content at an existing identity.
+- Mutable run manifests are atomically replaced as complete validated ledgers.
+- Selected catalogue work JSON retains unknown source fields; IIIF manifests
+  and OCR annotation lists retain exact HTTP response bytes.
+- The ingestion runner records source payloads and receipts as they arrive,
+  reconciles Bronze with Phase 4 resume state, retains retry history, and writes
+  honest terminal status.
+- Offline validation checks existence, byte length, hash, JSON, expected source
+  model, inventory coverage, and temporary-file cleanup.
+- `bronze inspect` and `bronze validate` support all runs or one run ID.
+- Read-only `/bronze` API routes list runs, return one manifest, and resolve one
+  manifest-declared raw resource without accepting filesystem paths.
+- The Data workspace is a real Bronze explorer with run summary, unresolved
+  failures, search/type filtering, provenance, source links, and raw JSON
+  preview.
+- Local `data/` is ignored. The image prepares `/app/data/bronze` for UID 10001,
+  and Compose persists it through the `bronze-data` named volume.
+- ADR-0005 and the Phase 5 implementation guide record the design and every
+  implementation step.
 
 ## Verification results
 
-- Dependencies: `uv sync --locked` passed with 43 packages checked.
-- Tests: 53 backend tests passed in the final full run.
-- Linting and typing: Ruff check, Ruff formatting check, strict mypy over 13
-  source files, and `git diff --check` passed.
-- Frontend: the Vite production build passed.
-- Browser: real ingestion state rendered correctly at 1280 px and 390 px;
-  the mobile view had no horizontal scroll and the browser reported no console
-  warnings or errors.
-- Live source: a five-work `cholera` run completed all 5 works and traversed 246
-  canvases; 14 canvases had no OCR, with 0 retries and 0 terminal failures.
-- Resume: a matching checkpoint resumed successfully, skipping completed work
-  IDs and retrying prior failures.
-- Container: the Phase 4 image built, Compose became healthy, `/` and
-  `/health/ready` returned HTTP 200, `/ingestion/status` returned an idle
-  typed response before the first volume run, and a containerized dry run wrote
-  status through the named volume as the unprivileged user.
-- Metrics: retrieval, citation, answer-quality, abstention, and latency targets
-  remain unmeasured.
+### Automated
+
+- Tests: 95 passed in the final full run.
+- Lint/format: Ruff check and Ruff format check passed.
+- Types: mypy reported no issues in 19 source files.
+- Frontend: Vite production build passed.
+- Compose: `docker compose config --quiet` passed.
+- Container: `european-heritage-rag:phase5` built successfully.
+
+### Live Bronze acceptance
+
+- Command: `uv run european-heritage-rag ingest wellcome --limit 5 --query cholera`
+- Result: 5/5 works completed, 300 canvases traversed, 6 canvases without OCR,
+  zero retries, and zero terminal failures.
+- Inventory: 5 catalogue works, 5 IIIF manifests, 300 annotation lists, 310
+  immutable resources total, plus one run manifest.
+- Size: 5,188,796 bytes including the run manifest.
+- Offline replay: `bronze validate` accepted all 310 declared resources.
+- Idempotency: resume retained 310 resources and the complete sorted resource
+  ID/path/SHA-256 inventory was unchanged.
+
+### Browser and container
+
+- Desktop rendered the live run and decoded resource JSON; filtering for
+  catalogue work returned exactly five resources.
+- At 390 × 844 the explorer had no horizontal overflow and used responsive run,
+  summary, list, and detail layouts.
+- Browser console inspection found no warnings or errors.
+- Compose became healthy, ran as UID 10001, returned HTTP 200, and confirmed
+  `/app/data/bronze` was writable through its named volume.
 
 ## Important decisions
 
@@ -104,59 +102,53 @@
 - [ADR-0002: Python, dependency management, and repository structure](adr/0002-python-dependency-management-and-repository-structure.md)
 - [ADR-0003: Browser-native UI foundation and same-origin FastAPI delivery](adr/0003-browser-native-ui-and-fastapi-delivery.md)
 - [ADR-0004: Wellcome API and IIIF ingestion strategy](adr/0004-wellcome-api-and-iiif-ingestion-strategy.md)
-- Use supported Wellcome catalogue and IIIF APIs rather than scraping public
-  pages.
-- Start with small API harvesting rather than the daily catalogue snapshot.
-- Restrict the first source slice to English online books with a Public Domain
-  Mark and an IIIF Presentation location.
-- Traverse sequentially until measurement justifies bounded concurrency.
-- Preserve OCR lines exactly during ingestion; cleaning belongs to Silver.
-- Keep Phase 4 status/checkpoints separate from Phase 5 Bronze source payloads.
-- Keep the CLI as the ingestion write boundary; API and browser read the same
-  persisted status.
-- Continue using relative same-origin browser API paths.
+- [ADR-0005: Append-only Bronze storage and idempotent ingestion](adr/0005-append-only-bronze-storage-and-idempotent-ingestion.md)
+- Preserve evidence before interpretation: cleaning and canonicalization begin
+  only in Silver.
+- Treat raw resource files as immutable and the run manifest as a progressing
+  atomically replaced ledger.
+- Define idempotent resume as an unchanged resource ID/path/hash inventory for
+  the same run and acquisition parameters.
+- Use one concrete local filesystem store until deployment provides evidence
+  for object storage.
 
 ## Known limitations
 
-- No raw catalogue, manifest, annotation, or OCR payload is persisted yet.
-- The corpus remains empty and cannot be replayed without the network until
-  Phase 5 is complete.
-- Resume is work-granular; interruption inside a book repeats that book.
-- File-backed status assumes one local writer and one shared filesystem.
+- Bronze assumes one writer per run and one shared filesystem.
+- The full manifest is rewritten after every receipt or lifecycle event.
+- Raw JSON is uncompressed.
+- Catalogue work data is lossless JSON but not a byte copy of the full
+  catalogue page.
+- The API returns complete run manifests and has no pagination yet.
+- Resume is work-granular; an interruption inside a work can repeat network
+  traversal for that work while immutable writes remain protected.
 - Traversal uses the first IIIF sequence and does not normalize printed page
   numbers.
-- `pages_downloaded` means canvases traversed, not durable files stored.
-- Numeric `Retry-After` is handled; HTTP-date values fall back to exponential
-  delay.
-- English is the only supported discovery language.
-- The browser uses polling and has manual browser acceptance but no automated
-  frontend unit or end-to-end suite.
-- Search, retrieval, generation, citations, evaluation, and chat answers do
-  not exist yet.
-- The strict page-evidence rule may abstain on facts only present in catalogue
-  metadata.
+- English remains the only discovery language.
+- Browser acceptance is manual; no automated frontend unit or end-to-end suite
+  exists.
+- No canonical works/pages, cleaned OCR, Parquet, chunks, embeddings, retrieval,
+  generation, citations, evaluation, or working chat answers exist yet.
 
 ## Next phase
 
-- Phase: [Phase 5 - Bronze data layer](building_phases/phase-05-bronze-data-layer.md)
+- Phase: [Phase 6 — Silver normalization and OCR cleaning](building_phases/phase-06-silver-normalization-and-ocr-cleaning.md)
 - Entry conditions satisfied:
-  - eligible works can be discovered through a narrow typed client;
-  - manifests and OCR annotations can be traversed in source order;
-  - missing OCR is represented without crashing the run;
-  - retries, per-work failures, checkpoints, and matching resume are tested;
-  - the CLI, status API, dashboard, and container state volume are operational;
-  - five current live works were traversed successfully;
-  - Phase 4 ADR, building guide, and closure verification are complete.
-- First intended task: define immutable Bronze identities and paths for raw
-  catalogue records, manifests, annotation lists, and acquisition metadata,
-  then make the current traversal write those payloads without cleaning them.
+  - five complete works exist in validated Bronze;
+  - every resource has source URL, acquisition time, path, size, and hash;
+  - source shapes can be parsed offline without Wellcome;
+  - idempotent resume has been proven against a live run;
+  - operator, browser, and container paths can inspect the same manifest.
+- First intended task: define canonical `Work` and `Page` models and exact
+  Bronze-to-Silver lineage before implementing conservative OCR-cleaning
+  functions.
 
 ## Next-chat reading order
 
 1. [README](../README.md)
 2. [Scope and evidence contract](scope-and-evidence-contract.md)
 3. [Architecture](architecture.md)
-4. [Phase 4 implementation guide](building_guides/phase-04-wellcome-discovery-and-ingestion-client.md)
-5. [ADR-0004](adr/0004-wellcome-api-and-iiif-ingestion-strategy.md)
-6. [Phase 5 plan](building_phases/phase-05-bronze-data-layer.md)
+4. [Phase 5 implementation guide](building_guides/phase-05-bronze-data-layer.md)
+5. [ADR-0005](adr/0005-append-only-bronze-storage-and-idempotent-ingestion.md)
+6. [Phase 6 plan](building_phases/phase-06-silver-normalization-and-ocr-cleaning.md)
 7. [Development and learning agreement](learning-guide-agreement.md)

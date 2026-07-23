@@ -19,9 +19,12 @@ Phase 3 added the frontend shell and serves its production build from FastAPI
 for both local and Docker execution. Phase 4 added bounded Wellcome work
 discovery, resilient IIIF manifest and OCR traversal, work-level checkpoints,
 resume, a CLI, and real file-backed dashboard progress. The verified live smoke
-test completed 5 works and traversed 246 canvases, 14 of which had no OCR. No
-Bronze corpus has been persisted or indexed, and the application is not ready
-for end-user use.
+test completed 5 works and traversed 246 canvases, 14 of which had no OCR.
+Phase 5 added immutable Bronze storage, provenance manifests, content hashes,
+atomic writes, offline validation, idempotent resume, CLI/API inspection, and a
+live browser explorer. The Phase 5 acceptance run stored 310 raw resources for
+5 works and validated all of them offline. No Silver, searchable, or indexed
+corpus exists yet, so the application is not ready for end-user use.
 
 ## Run the application
 
@@ -52,6 +55,7 @@ Open <http://localhost:8000/>. The operational endpoints are available at:
 - <http://localhost:8000/health/live>
 - <http://localhost:8000/health/ready>
 - <http://localhost:8000/ingestion/status>
+- <http://localhost:8000/bronze/runs>
 - <http://localhost:8000/docs>
 
 Stop the local server with `Ctrl+C`.
@@ -72,7 +76,7 @@ with:
 docker compose down
 ```
 
-## Run Wellcome discovery and traversal
+## Build the Wellcome Bronze corpus
 
 Inspect the Phase 4 command:
 
@@ -101,9 +105,26 @@ uv run european-heritage-rag ingest wellcome --limit 5 --query cholera --resume
 ```
 
 Progress and work-level resume state are written atomically under
-`var/ingestion/`. These files contain control state only. Phase 5 will add
-immutable Bronze copies of source payloads and OCR, so a Phase 4 traversal does
-not yet create a reusable dataset.
+`var/ingestion/`. Raw selected catalogue works, exact IIIF manifests, exact OCR
+annotation-list responses, and their run manifest are stored under
+`data/bronze/`. The generated `data/` tree is excluded from Git.
+
+Inspect or validate every run:
+
+```shell
+uv run european-heritage-rag bronze inspect
+uv run european-heritage-rag bronze validate
+```
+
+Inspect or validate one run:
+
+```shell
+uv run european-heritage-rag bronze inspect --run-id <run-id>
+uv run european-heritage-rag bronze validate --run-id <run-id>
+```
+
+Validation checks declared files, byte lengths, SHA-256 hashes, JSON source
+shapes, undeclared JSON, and temporary files without calling Wellcome.
 
 With Compose running, use the same command inside the API container:
 
@@ -111,8 +132,13 @@ With Compose running, use the same command inside the API container:
 docker compose exec api european-heritage-rag ingest wellcome --limit 5 --query cholera --dry-run
 ```
 
-Compose mounts a named volume at `/app/var/ingestion`, preserving status and
-checkpoints when the API container is replaced.
+Compose mounts named volumes at `/app/var/ingestion` and `/app/data/bronze`,
+preserving control state and the raw corpus when the API container is replaced.
+Run a non-dry ingestion inside the container to populate its Bronze volume:
+
+```shell
+docker compose exec api european-heritage-rag ingest wellcome --limit 5 --query cholera
+```
 
 ### Generated frontend directories
 
@@ -206,8 +232,12 @@ search, claims about material outside the indexed corpus, image interpretation,
 handwriting recognition, user document upload, non-public-domain content,
 autonomous research, or exhaustive coverage of the Wellcome catalogue. It is
 not a substitute for reading the original source or consulting a historian.
-Phase 4 source traversal is sequential and English-only, resumes at work rather
-than canvas granularity, and does not persist raw payloads or cleaned OCR.
+Source traversal is sequential and English-only and resumes at work rather than
+canvas granularity. Bronze is local-filesystem, single-writer, uncompressed raw
+JSON; the complete run manifest is rewritten atomically after each event.
+Catalogue works preserve all decoded source fields but not the original
+catalogue page's byte formatting. OCR is intentionally not cleaned until
+Silver.
 
 ## Documentation
 
@@ -220,7 +250,9 @@ than canvas granularity, and does not persist raw payloads or cleaned OCR.
 - [ADR-0002: Python, dependency management, and repository structure](docs/adr/0002-python-dependency-management-and-repository-structure.md)
 - [ADR-0003: Browser-native UI foundation and same-origin FastAPI delivery](docs/adr/0003-browser-native-ui-and-fastapi-delivery.md)
 - [ADR-0004: Wellcome API and IIIF ingestion strategy](docs/adr/0004-wellcome-api-and-iiif-ingestion-strategy.md)
+- [ADR-0005: Append-only Bronze storage and idempotent ingestion](docs/adr/0005-append-only-bronze-storage-and-idempotent-ingestion.md)
 - [Building guides](docs/building_guides/README.md)
 - [Phase 3 implementation guide](docs/building_guides/phase-03-ui-foundation-and-progress-dashboard.md)
 - [Phase 4 implementation guide](docs/building_guides/phase-04-wellcome-discovery-and-ingestion-client.md)
+- [Phase 5 implementation guide](docs/building_guides/phase-05-bronze-data-layer.md)
 - [Development and learning agreement](docs/learning-guide-agreement.md)

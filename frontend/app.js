@@ -1,137 +1,20 @@
 const HEALTH_ENDPOINT = "/health/ready";
 const INGESTION_STATUS_ENDPOINT = "/ingestion/status";
+const BRONZE_RUNS_ENDPOINT = "/bronze/runs";
 const INGESTION_POLL_INTERVAL_MS = 3000;
-
-/**
- * @typedef {Object} HealthResponse
- * @property {"ok"} status
- * @property {string} service
- * @property {string} version
- * @property {Record<string, "ok">} checks
- */
-
-/**
- * @typedef {Object} IngestionEvent
- * @property {string} timestamp
- * @property {"info" | "warning" | "error"} level
- * @property {string} message
- * @property {string | null} work_id
- */
-
-/**
- * @typedef {Object} IngestionStatus
- * @property {"idle" | "running" | "completed" | "completed_with_failures" | "failed"} status
- * @property {string | null} run_id
- * @property {number} requested_limit
- * @property {boolean} dry_run
- * @property {string | null} current_work_id
- * @property {string | null} current_work_title
- * @property {number} works_discovered
- * @property {number} works_completed
- * @property {number} pages_downloaded
- * @property {number} missing_ocr_pages
- * @property {number} retry_count
- * @property {number} failure_count
- * @property {IngestionEvent[]} recent_events
- * @property {string | null} updated_at
- */
-
-/**
- * @typedef {Object} SampleRecord
- * @property {string} id
- * @property {string} title
- * @property {string} contributor
- * @property {number} year
- * @property {string} language
- * @property {string} rights
- * @property {number} pages
- * @property {"ready" | "review"} status
- * @property {string} source
- * @property {number} startPage
- * @property {string[]} ocr
- */
-
-/** @type {SampleRecord[]} */
-const sampleRecords = [
-  {
-    id: "WEL-DEMO-001",
-    title: "Reports on cholera in London",
-    contributor: "Public Health Committee",
-    year: 1854,
-    language: "English",
-    rights: "Public Domain Mark",
-    pages: 186,
-    status: "ready",
-    source: "Wellcome Collection · demo",
-    startPage: 17,
-    ocr: [
-      "The inquiry was directed first to the condition of the water supplied to the several districts, and next to the habits of the population during the weeks in which the sickness prevailed.\n\nEvery reported case was entered by street and date, so that no conclusion should rest on recollection alone.",
-      "The returns show a marked difference between neighbouring districts. This difference cannot be understood without attention to drainage, crowding, and the source from which drinking water was obtained.\n\nThe observations are presented as evidence, not as a complete account of every cause.",
-      "It is recommended that each local authority preserve a regular register of illness and mortality, accompanied wherever possible by particulars of dwelling, occupation, and water supply.\n\nSuch records would permit earlier warning and more exact comparison."
-    ]
-  },
-  {
-    id: "WEL-DEMO-002",
-    title: "On the preservation of public health",
-    contributor: "Eleanor Whitcombe",
-    year: 1848,
-    language: "English",
-    rights: "Public Domain Mark",
-    pages: 224,
-    status: "ready",
-    source: "Wellcome Collection · demo",
-    startPage: 42,
-    ocr: [
-      "Public health depends not upon a single measure, but upon the ordinary conditions in which families live and labour. Clean water, sufficient air, and the removal of refuse are therefore public concerns.\n\nThe prevention of disease must begin before sickness is visible.",
-      "Where streets are narrow and dwellings overcrowded, inspection alone is insufficient. Local reports must lead to works of drainage and to a reliable provision of wholesome water.\n\nDelay transfers the greatest burden to those least able to bear it.",
-      "A sanitary report should distinguish observation from inference. The place, date, and number of persons affected ought always to accompany any general conclusion offered to the public."
-    ]
-  },
-  {
-    id: "WEL-DEMO-003",
-    title: "Notes on sanitary reform",
-    contributor: "Thomas H. Bell",
-    year: 1872,
-    language: "English",
-    rights: "Public Domain Mark",
-    pages: 98,
-    status: "ready",
-    source: "Wellcome Collection · demo",
-    startPage: 11,
-    ocr: [
-      "Sanitary reform is often described as an expense, though its first economy is the prevention of avoidable loss. A town pays for neglected drainage more than once: in illness, interrupted work, and emergency relief.\n\nThe accounts should therefore include consequences as well as construction.",
-      "The improvement of courts and alleys requires consultation with inhabitants. Plans drawn without knowledge of daily use may move a nuisance rather than remove it.\n\nInspection should be repeated after works are completed.",
-      "No table is useful if its headings conceal the unit counted. Houses, persons, and reported cases must not be interchanged, and missing returns should be marked rather than silently estimated."
-    ]
-  },
-  {
-    id: "WEL-DEMO-004",
-    title: "Medical observations, volume II",
-    contributor: "Contributor unconfirmed",
-    year: 1861,
-    language: "English",
-    rights: "Rights review required",
-    pages: 0,
-    status: "review",
-    source: "Wellcome Collection · demo",
-    startPage: 0,
-    ocr: [
-      "OCR is not available for this sample record. The pipeline retains the metadata record and marks the missing page resource for review."
-    ]
-  }
-];
 
 const viewNames = {
   chat: "Chat",
   dashboard: "Ingestion",
-  data: "Data explorer",
+  data: "Bronze explorer",
   retrieval: "Retrieval",
   evaluation: "Evaluation"
 };
 
 const state = {
-  activeRecordId: sampleRecords[0].id,
-  activePageIndex: 0,
+  bronzeRuns: [],
+  activeBronzeRun: null,
+  activeBronzeResource: null,
   ingestionRefreshPending: false,
   toastTimer: 0
 };
@@ -165,6 +48,9 @@ const elements = {
   ingestionEvents: document.querySelector("[data-ingestion-events]"),
   ingestionAttentionTitle: document.querySelector("[data-ingestion-attention-title]"),
   ingestionAttentionDetail: document.querySelector("[data-ingestion-attention-detail]"),
+  bronzeRunSelect: document.querySelector("[data-bronze-run-select]"),
+  bronzeRunSummary: document.querySelector("[data-bronze-run-summary]"),
+  bronzeFailures: document.querySelector("[data-bronze-failures]"),
   recordList: document.querySelector("[data-record-list]"),
   recordCount: document.querySelector("[data-record-count]"),
   recordEmpty: document.querySelector("[data-record-empty]"),
@@ -181,17 +67,12 @@ function setActiveView(viewId) {
   document.querySelectorAll("[data-view-panel]").forEach((panel) => {
     panel.hidden = panel.dataset.viewPanel !== viewId;
   });
-
   document.querySelectorAll("[data-view]").forEach((button) => {
     const isActive = button.dataset.view === viewId;
     button.classList.toggle("is-active", isActive);
-    if (isActive) {
-      button.setAttribute("aria-current", "page");
-    } else {
-      button.removeAttribute("aria-current");
-    }
+    if (isActive) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
   });
-
   elements.currentView.textContent = viewNames[viewId];
   document.title = `${viewNames[viewId]} — HeritageRAG`;
   closeSidebar();
@@ -210,39 +91,34 @@ function closeSidebar() {
 }
 
 function syncSidebarAccessibility() {
-  const isHidden = mobileNavigation.matches && !elements.body.classList.contains("sidebar-open");
-  elements.sidebar.inert = isHidden;
-  if (isHidden) {
-    elements.sidebar.setAttribute("aria-hidden", "true");
-  } else {
-    elements.sidebar.removeAttribute("aria-hidden");
-  }
-  elements.sidebarOpenButton.setAttribute("aria-expanded", String(!isHidden && mobileNavigation.matches));
+  const hidden = mobileNavigation.matches && !elements.body.classList.contains("sidebar-open");
+  elements.sidebar.inert = hidden;
+  if (hidden) elements.sidebar.setAttribute("aria-hidden", "true");
+  else elements.sidebar.removeAttribute("aria-hidden");
+  elements.sidebarOpenButton.setAttribute(
+    "aria-expanded",
+    String(!hidden && mobileNavigation.matches)
+  );
 }
 
 async function refreshHealth() {
   elements.healthButton.className = "system-status is-checking";
   elements.healthLabel.textContent = "Checking system";
   elements.healthButton.disabled = true;
-
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), 3500);
-
   try {
     const response = await fetch(HEALTH_ENDPOINT, {
       headers: { Accept: "application/json" },
       signal: controller.signal
     });
     if (!response.ok) throw new Error(`Health request returned ${response.status}`);
-
-    /** @type {HealthResponse} */
     const health = await response.json();
     if (health.status !== "ok") throw new Error("Unexpected health response");
-
     elements.healthButton.className = "system-status is-online";
     elements.healthLabel.textContent = "System operational";
     elements.healthButton.title = `${health.service} ${health.version} · click to refresh`;
-  } catch (error) {
+  } catch {
     elements.healthButton.className = "system-status is-offline";
     elements.healthLabel.textContent = "Backend offline";
     elements.healthButton.title = "Start the API and click to try again";
@@ -268,10 +144,13 @@ const ingestionBadgeStyles = {
   failed: "review"
 };
 
-function formatEventTime(value) {
+function formatTime(value) {
   const timestamp = new Date(value);
   if (Number.isNaN(timestamp.getTime())) return "Unknown time";
-  return timestamp.toLocaleTimeString([], {
+  return timestamp.toLocaleString([], {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit"
@@ -280,26 +159,12 @@ function formatEventTime(value) {
 
 function renderIngestionEvents(events) {
   elements.ingestionEvents.replaceChildren();
-
   if (events.length === 0) {
     const item = document.createElement("li");
-    const mark = document.createElement("span");
-    const detail = document.createElement("div");
-    const title = document.createElement("strong");
-    const description = document.createElement("p");
-    const time = document.createElement("time");
-
-    mark.className = "activity-mark";
-    mark.setAttribute("aria-hidden", "true");
-    title.textContent = "No ingestion events yet";
-    description.textContent = "Run the Wellcome CLI command to begin.";
-    time.textContent = "Idle";
-    detail.append(title, description, time);
-    item.append(mark, detail);
+    item.innerHTML = "<span class=\"activity-mark\"></span><div><strong>No ingestion events yet</strong><p>Run the Wellcome CLI command to begin.</p><time>Idle</time></div>";
     elements.ingestionEvents.append(item);
     return;
   }
-
   [...events].reverse().forEach((event) => {
     const item = document.createElement("li");
     const mark = document.createElement("span");
@@ -307,13 +172,11 @@ function renderIngestionEvents(events) {
     const title = document.createElement("strong");
     const description = document.createElement("p");
     const time = document.createElement("time");
-
     mark.className = `activity-mark activity-mark--${event.level === "info" ? "success" : "warning"}`;
-    mark.setAttribute("aria-hidden", "true");
     mark.textContent = event.level === "info" ? "✓" : "!";
     title.textContent = event.message;
     description.textContent = event.work_id ? `Work ${event.work_id}` : "Ingestion run";
-    time.textContent = formatEventTime(event.timestamp);
+    time.textContent = formatTime(event.timestamp);
     time.dateTime = event.timestamp;
     detail.append(title, description, time);
     item.append(mark, detail);
@@ -322,15 +185,14 @@ function renderIngestionEvents(events) {
 }
 
 function renderIngestionStatus(status) {
-  const statusLabel = ingestionStatusLabels[status.status] || status.status;
+  const label = ingestionStatusLabels[status.status] || status.status;
   const denominator = status.works_discovered || status.requested_limit;
-  const completedPercent = denominator > 0
+  const completion = denominator > 0
     ? Math.round((status.works_completed / denominator) * 100)
     : 0;
   const percent = status.dry_run && status.status === "completed"
     ? 100
-    : Math.min(100, completedPercent);
-
+    : Math.min(100, completion);
   elements.ingestionWorks.textContent = `${status.works_completed} / ${status.works_discovered}`;
   elements.ingestionDiscovered.textContent = status.works_discovered
     ? `${status.works_discovered} eligible works discovered`
@@ -340,11 +202,11 @@ function renderIngestionStatus(status) {
   elements.ingestionFailures.textContent = status.failure_count;
   elements.ingestionNavCount.textContent = status.failure_count;
   elements.ingestionRetries.textContent = `${status.retry_count} retries`;
-  elements.ingestionStatus.textContent = statusLabel;
+  elements.ingestionStatus.textContent = label;
   elements.ingestionUpdated.textContent = status.updated_at
-    ? `Updated at ${formatEventTime(status.updated_at)}`
+    ? `Updated ${formatTime(status.updated_at)}`
     : "Waiting for a CLI run";
-  elements.ingestionBadge.textContent = statusLabel;
+  elements.ingestionBadge.textContent = label;
   elements.ingestionBadge.className = `state-badge state-badge--${ingestionBadgeStyles[status.status] || "planned"}`;
   elements.ingestionRunId.textContent = status.run_id || "No ingestion run yet";
   elements.ingestionPercent.textContent = `${percent}%`;
@@ -352,13 +214,11 @@ function renderIngestionStatus(status) {
   elements.ingestionProgressBar.style.width = `${percent}%`;
   elements.ingestionCurrentWork.textContent = status.current_work_title
     ? `Current work: ${status.current_work_title}`
-    : status.status === "idle"
-      ? "Waiting for catalogue discovery"
-      : `Run status: ${statusLabel}`;
+    : `Run status: ${label}`;
   elements.ingestionDiscoveryStage.textContent = `${status.works_discovered} selected`;
   elements.ingestionCompletedStage.textContent = `${status.works_completed} completed`;
   elements.ingestionOcrStage.textContent = `${status.pages_downloaded} pages`;
-  elements.ingestionResultStage.textContent = statusLabel;
+  elements.ingestionResultStage.textContent = label;
   elements.ingestionAttentionTitle.textContent = status.failure_count === 0
     ? "No terminal failures"
     : `${status.failure_count} work failure${status.failure_count === 1 ? "" : "s"}`;
@@ -366,27 +226,21 @@ function renderIngestionStatus(status) {
     `${status.missing_ocr_pages} pages have no OCR; ` +
     `${status.retry_count} retry waits were recorded.`
   );
-
   renderIngestionEvents(status.recent_events);
 }
 
 async function refreshIngestionStatus() {
   if (state.ingestionRefreshPending) return;
   state.ingestionRefreshPending = true;
-
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), 3500);
-
   try {
     const response = await fetch(INGESTION_STATUS_ENDPOINT, {
       headers: { Accept: "application/json" },
       signal: controller.signal
     });
     if (!response.ok) throw new Error(`Ingestion status returned ${response.status}`);
-
-    /** @type {IngestionStatus} */
-    const ingestionStatus = await response.json();
-    renderIngestionStatus(ingestionStatus);
+    renderIngestionStatus(await response.json());
   } catch {
     elements.ingestionStatus.textContent = "Unavailable";
     elements.ingestionUpdated.textContent = "Could not reach ingestion status API";
@@ -407,103 +261,185 @@ function showToast(message) {
   }, 3200);
 }
 
-function getFilteredRecords() {
+function getFilteredResources() {
+  if (!state.activeBronzeRun) return [];
   const query = elements.recordSearch.value.trim().toLowerCase();
   const filter = elements.recordFilter.value;
-
-  return sampleRecords.filter((record) => {
-    const matchesText = [record.title, record.contributor, record.id]
-      .some((value) => value.toLowerCase().includes(query));
-    const matchesStatus = filter === "all" || record.status === filter;
-    return matchesText && matchesStatus;
+  return state.activeBronzeRun.resources.filter((resource) => {
+    const searchable = [
+      resource.work_id,
+      resource.relative_path,
+      resource.resource_id
+    ].join(" ").toLowerCase();
+    return searchable.includes(query) &&
+      (filter === "all" || resource.resource_type === filter);
   });
 }
 
-function renderRecordList() {
-  const records = getFilteredRecords();
-  elements.recordList.replaceChildren();
-  elements.recordCount.textContent = `${records.length} ${records.length === 1 ? "work" : "works"}`;
-  elements.recordEmpty.hidden = records.length !== 0;
+function resourceLabel(resource) {
+  return resource.resource_type
+    .replace("catalogue_work", "Catalogue work")
+    .replace("iiif_manifest", "IIIF manifest")
+    .replace("ocr_annotation_list", "OCR annotation");
+}
 
-  records.forEach((record) => {
+function renderResourceList() {
+  const resources = getFilteredResources();
+  elements.recordList.replaceChildren();
+  elements.recordCount.textContent = `${resources.length} ${resources.length === 1 ? "resource" : "resources"}`;
+  elements.recordEmpty.hidden = resources.length !== 0;
+  resources.forEach((resource) => {
     const button = document.createElement("button");
+    const wrapper = document.createElement("span");
+    const title = document.createElement("strong");
+    const subtitle = document.createElement("small");
+    const metadata = document.createElement("span");
+    const arrow = document.createElement("span");
     button.type = "button";
-    button.className = `record-item${record.id === state.activeRecordId ? " is-active" : ""}`;
-    button.dataset.recordId = record.id;
-    button.innerHTML = `
-      <span>
-        <strong>${record.title}</strong>
-        <small>${record.contributor}</small>
-        <span class="record-meta">${record.year} · ${record.pages || "No"} pages · ${record.status === "ready" ? "Ready" : "Review"}</span>
-      </span>
-      <span class="record-arrow" aria-hidden="true">›</span>
-    `;
-    button.setAttribute("aria-label", `Open ${record.title}`);
+    button.className = `record-item${resource.resource_id === state.activeBronzeResource?.resource_id ? " is-active" : ""}`;
+    button.dataset.resourceId = resource.resource_id;
+    title.textContent = resourceLabel(resource);
+    subtitle.textContent = `Work ${resource.work_id}`;
+    metadata.className = "record-meta";
+    metadata.textContent = `${resource.byte_length.toLocaleString()} bytes · ${resource.relative_path}`;
+    arrow.className = "record-arrow";
+    arrow.textContent = "›";
+    wrapper.append(title, subtitle, metadata);
+    button.append(wrapper, arrow);
     elements.recordList.append(button);
   });
 }
 
-function getActiveRecord() {
-  return sampleRecords.find((record) => record.id === state.activeRecordId) || sampleRecords[0];
-}
-
-function updateOcrPage(record) {
-  const pageNumber = record.startPage + state.activePageIndex;
-  document.querySelector("[data-detail-page]").textContent = pageNumber || "unavailable";
-  document.querySelector("[data-page-current]").textContent = state.activePageIndex + 1;
-  document.querySelector("[data-page-total]").textContent = record.ocr.length;
-  document.querySelector("[data-detail-ocr]").textContent = record.ocr[state.activePageIndex];
-
-  document.querySelector("[data-page-prev]").disabled = state.activePageIndex === 0;
-  document.querySelector("[data-page-next]").disabled = state.activePageIndex === record.ocr.length - 1;
-}
-
-function renderActiveRecord({ showLoading = false } = {}) {
-  const record = getActiveRecord();
-
-  if (showLoading) {
-    elements.detailLoading.hidden = false;
-    elements.detailContent.setAttribute("aria-busy", "true");
+function renderRunSummary() {
+  const run = state.activeBronzeRun;
+  elements.bronzeRunSummary.replaceChildren();
+  if (!run) {
+    ["Status", "Works", "Resources", "Failures"].forEach((label) => {
+      const wrapper = document.createElement("div");
+      const term = document.createElement("dt");
+      const detail = document.createElement("dd");
+      term.textContent = label;
+      detail.textContent = "—";
+      wrapper.append(term, detail);
+      elements.bronzeRunSummary.append(wrapper);
+    });
+    return;
   }
+  const unresolved = run.failures.filter((failure) => failure.resolved_at === null);
+  const summary = [
+    ["Status", run.status.replaceAll("_", " ")],
+    ["Works", `${run.completed_work_count} / ${run.discovered_work_count}`],
+    ["Resources", run.resources.length.toLocaleString()],
+    ["Failures", `${unresolved.length} unresolved / ${run.failures.length} recorded`]
+  ];
+  summary.forEach(([label, value]) => {
+    const wrapper = document.createElement("div");
+    const term = document.createElement("dt");
+    const detail = document.createElement("dd");
+    term.textContent = label;
+    detail.textContent = value;
+    wrapper.append(term, detail);
+    elements.bronzeRunSummary.append(wrapper);
+  });
 
-  window.setTimeout(() => {
-    document.querySelector("[data-detail-title]").textContent = record.title;
-    document.querySelector("[data-detail-contributor]").textContent = record.contributor;
-    document.querySelector("[data-detail-id]").textContent = record.id;
-    document.querySelector("[data-detail-year]").textContent = record.year;
-    document.querySelector("[data-detail-language]").textContent = record.language;
-    document.querySelector("[data-detail-rights]").textContent = record.rights;
-    document.querySelector("[data-detail-pages]").textContent = record.pages || "Unavailable";
-    document.querySelector("[data-detail-source]").textContent = record.source;
+  elements.bronzeFailures.replaceChildren();
+  elements.bronzeFailures.hidden = unresolved.length === 0;
+  unresolved.forEach((failure) => {
+    const item = document.createElement("p");
+    item.textContent = `${failure.message} — ${failure.source_url}`;
+    elements.bronzeFailures.append(item);
+  });
+}
 
-    const status = document.querySelector("[data-detail-status]");
-    status.textContent = record.status === "ready" ? "Ready" : "Needs review";
-    status.className = `state-badge state-badge--${record.status}`;
-
-    updateOcrPage(record);
+async function renderResourceDetail(resource) {
+  const run = state.activeBronzeRun;
+  if (!run || !resource) return;
+  state.activeBronzeResource = resource;
+  renderResourceList();
+  elements.detailLoading.hidden = false;
+  elements.detailContent.setAttribute("aria-busy", "true");
+  document.querySelector("[data-detail-title]").textContent = resourceLabel(resource);
+  document.querySelector("[data-detail-subtitle]").textContent = resource.relative_path;
+  document.querySelector("[data-detail-id]").textContent = resource.resource_id;
+  document.querySelector("[data-detail-work-id]").textContent = resource.work_id;
+  document.querySelector("[data-detail-bytes]").textContent = resource.byte_length.toLocaleString();
+  document.querySelector("[data-detail-acquired]").textContent = formatTime(resource.acquired_at);
+  document.querySelector("[data-detail-hash]").textContent = resource.content_sha256;
+  document.querySelector("[data-detail-path]").textContent = resource.relative_path;
+  const source = document.querySelector("[data-detail-source]");
+  source.href = resource.source_url;
+  source.textContent = "Open original source";
+  const preview = document.querySelector("[data-detail-json]");
+  preview.textContent = "Loading stored JSON…";
+  try {
+    const url = `${BRONZE_RUNS_ENDPOINT}/${encodeURIComponent(run.identity.run_id)}/resources/${encodeURIComponent(resource.resource_id)}`;
+    const response = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error(`Resource preview returned ${response.status}`);
+    preview.textContent = JSON.stringify(await response.json(), null, 2);
+  } catch (error) {
+    preview.textContent = `Could not load this resource: ${error.message}`;
+  } finally {
     elements.detailLoading.hidden = true;
     elements.detailContent.removeAttribute("aria-busy");
-  }, showLoading ? 280 : 0);
+  }
 }
 
-function selectRecord(recordId) {
-  if (!sampleRecords.some((record) => record.id === recordId)) return;
-  state.activeRecordId = recordId;
-  state.activePageIndex = 0;
-  renderRecordList();
-  renderActiveRecord({ showLoading: true });
-}
-
-function moveOcrPage(direction) {
-  const record = getActiveRecord();
-  state.activePageIndex = Math.max(0, Math.min(record.ocr.length - 1, state.activePageIndex + direction));
-  updateOcrPage(record);
-}
-
-function resetRecordSearch() {
+function selectBronzeRun(runId) {
+  state.activeBronzeRun = state.bronzeRuns.find(
+    (run) => run.identity.run_id === runId
+  ) || null;
+  state.activeBronzeResource = null;
   elements.recordSearch.value = "";
   elements.recordFilter.value = "all";
-  renderRecordList();
+  renderRunSummary();
+  renderResourceList();
+  const firstResource = state.activeBronzeRun?.resources[0];
+  if (firstResource) renderResourceDetail(firstResource);
+  else document.querySelector("[data-detail-json]").textContent = "This run has no stored resources.";
+}
+
+async function refreshBronzeRuns() {
+  elements.bronzeRunSelect.disabled = true;
+  try {
+    const response = await fetch(BRONZE_RUNS_ENDPOINT, {
+      headers: { Accept: "application/json" }
+    });
+    if (!response.ok) throw new Error(`Bronze runs returned ${response.status}`);
+    state.bronzeRuns = await response.json();
+    elements.bronzeRunSelect.replaceChildren();
+    if (state.bronzeRuns.length === 0) {
+      const option = document.createElement("option");
+      option.textContent = "No Bronze runs available";
+      elements.bronzeRunSelect.append(option);
+      renderRunSummary();
+      renderResourceList();
+      document.querySelector("[data-detail-json]").textContent = (
+        "Run a non-dry Wellcome ingestion to create Bronze data."
+      );
+      return;
+    }
+    state.bronzeRuns.forEach((run) => {
+      const option = document.createElement("option");
+      option.value = run.identity.run_id;
+      option.textContent = `${formatTime(run.started_at)} · ${run.status} · ${run.identity.run_id}`;
+      elements.bronzeRunSelect.append(option);
+    });
+    selectBronzeRun(state.bronzeRuns[0].identity.run_id);
+  } catch (error) {
+    elements.bronzeRunSelect.replaceChildren();
+    const option = document.createElement("option");
+    option.textContent = "Bronze API unavailable";
+    elements.bronzeRunSelect.append(option);
+    document.querySelector("[data-detail-json]").textContent = error.message;
+  } finally {
+    elements.bronzeRunSelect.disabled = false;
+  }
+}
+
+function resetResourceSearch() {
+  elements.recordSearch.value = "";
+  elements.recordFilter.value = "all";
+  renderResourceList();
   elements.recordSearch.focus();
 }
 
@@ -511,13 +447,10 @@ function handleChatSubmit(event) {
   event.preventDefault();
   const input = document.querySelector("[data-chat-input]");
   const feedback = document.querySelector("[data-chat-feedback]");
-  const question = input.value.trim();
-
-  if (!question) {
+  if (!input.value.trim()) {
     input.focus();
     return;
   }
-
   feedback.textContent = "Your question is ready. Answer generation will be connected after retrieval and evidence validation are complete.";
   feedback.hidden = false;
 }
@@ -525,19 +458,17 @@ function handleChatSubmit(event) {
 document.querySelectorAll("[data-view]").forEach((button) => {
   button.addEventListener("click", () => setActiveView(button.dataset.view));
 });
-
-document.querySelector("[data-sidebar-open]").addEventListener("click", openSidebar);
-document.querySelectorAll("[data-sidebar-close]").forEach((button) => button.addEventListener("click", closeSidebar));
+elements.sidebarOpenButton.addEventListener("click", openSidebar);
+document.querySelectorAll("[data-sidebar-close]").forEach((button) => {
+  button.addEventListener("click", closeSidebar);
+});
 elements.healthButton.addEventListener("click", refreshHealth);
-
 document.querySelector("[data-dismiss-notice]").addEventListener("click", (event) => {
   event.currentTarget.closest(".notice-banner").remove();
 });
-
 document.querySelectorAll("[data-notice]").forEach((button) => {
   button.addEventListener("click", () => showToast(button.dataset.notice));
 });
-
 document.querySelectorAll("[data-prompt]").forEach((button) => {
   button.addEventListener("click", () => {
     const input = document.querySelector("[data-chat-input]");
@@ -545,38 +476,37 @@ document.querySelectorAll("[data-prompt]").forEach((button) => {
     input.focus();
   });
 });
-
 document.querySelector("[data-chat-form]").addEventListener("submit", handleChatSubmit);
-elements.recordSearch.addEventListener("input", renderRecordList);
-elements.recordFilter.addEventListener("change", renderRecordList);
-document.querySelector("[data-reset-search]").addEventListener("click", resetRecordSearch);
-
-elements.recordList.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-record-id]");
-  if (button) selectRecord(button.dataset.recordId);
+elements.bronzeRunSelect.addEventListener("change", () => {
+  selectBronzeRun(elements.bronzeRunSelect.value);
 });
-
-document.querySelector("[data-page-prev]").addEventListener("click", () => moveOcrPage(-1));
-document.querySelector("[data-page-next]").addEventListener("click", () => moveOcrPage(1));
+elements.recordSearch.addEventListener("input", renderResourceList);
+elements.recordFilter.addEventListener("change", renderResourceList);
+document.querySelector("[data-reset-search]").addEventListener("click", resetResourceSearch);
+elements.recordList.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-resource-id]");
+  const resource = state.activeBronzeRun?.resources.find(
+    (candidate) => candidate.resource_id === button?.dataset.resourceId
+  );
+  if (resource) renderResourceDetail(resource);
+});
 document.querySelector("[data-copy-id]").addEventListener("click", async () => {
-  const record = getActiveRecord();
+  const id = state.activeBronzeResource?.resource_id;
+  if (!id) return;
   try {
-    await navigator.clipboard.writeText(record.id);
-    showToast(`${record.id} copied to clipboard.`);
+    await navigator.clipboard.writeText(id);
+    showToast("Resource ID copied to clipboard.");
   } catch {
-    showToast(`Work ID: ${record.id}`);
+    showToast(`Resource ID: ${id}`);
   }
 });
-
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") closeSidebar();
 });
-
 mobileNavigation.addEventListener("change", syncSidebarAccessibility);
 
 syncSidebarAccessibility();
-renderRecordList();
-renderActiveRecord({ showLoading: true });
 refreshHealth();
 refreshIngestionStatus();
+refreshBronzeRuns();
 window.setInterval(refreshIngestionStatus, INGESTION_POLL_INTERVAL_MS);

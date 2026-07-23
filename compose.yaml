@@ -3,14 +3,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: european-heritage-rag:phase4
+    image: european-heritage-rag:phase5
     environment:
       APP_ENV: production
       LOG_LEVEL: INFO
+      BRONZE_DATA_DIRECTORY: /app/data/bronze
     ports:
       - "8000:8000"
     volumes:
       - ingestion-state:/app/var/ingestion
+      - bronze-data:/app/data/bronze
     healthcheck:
       test:
         [
@@ -26,3 +28,4 @@ services:
 
 volumes:
   ingestion-state:
+  bronze-data:

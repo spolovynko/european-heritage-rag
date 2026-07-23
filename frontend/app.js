@@ -2,6 +2,7 @@ const HEALTH_ENDPOINT = "/health/ready";
 const INGESTION_STATUS_ENDPOINT = "/ingestion/status";
 const BRONZE_RUNS_ENDPOINT = "/bronze/runs";
 const SILVER_DATASETS_ENDPOINT = "/silver/datasets";
+const GOLD_DATASETS_ENDPOINT = "/gold/datasets";
 const INGESTION_POLL_INTERVAL_MS = 3000;
 
 const viewNames = {
@@ -22,6 +23,12 @@ const state = {
   silverPages: [],
   silverPageTotal: 0,
   activeSilverPage: null,
+  goldDatasets: [],
+  activeGoldDataset: null,
+  goldWorks: [],
+  goldChunks: [],
+  goldChunkTotal: 0,
+  activeGoldChunk: null,
   ingestionRefreshPending: false,
   toastTimer: 0
 };
@@ -67,6 +74,7 @@ const elements = {
   detailContent: document.querySelector("[data-detail-content]"),
   bronzeExplorer: document.querySelector("[data-bronze-explorer]"),
   silverExplorer: document.querySelector("[data-silver-explorer]"),
+  goldExplorer: document.querySelector("[data-gold-explorer]"),
   silverDatasetSelect: document.querySelector("[data-silver-dataset-select]"),
   silverSummary: document.querySelector("[data-silver-summary]"),
   silverWorkSelect: document.querySelector("[data-silver-work-select]"),
@@ -74,6 +82,14 @@ const elements = {
   silverPageList: document.querySelector("[data-silver-page-list]"),
   silverPageCount: document.querySelector("[data-silver-page-count]"),
   silverPageEmpty: document.querySelector("[data-silver-page-empty]"),
+  goldDatasetSelect: document.querySelector("[data-gold-dataset-select]"),
+  goldSummary: document.querySelector("[data-gold-summary]"),
+  goldWorkSelect: document.querySelector("[data-gold-work-select]"),
+  goldChunkList: document.querySelector("[data-gold-chunk-list]"),
+  goldChunkCount: document.querySelector("[data-gold-chunk-count]"),
+  goldChunkEmpty: document.querySelector("[data-gold-chunk-empty]"),
+  goldPrevious: document.querySelector("[data-gold-previous]"),
+  goldNext: document.querySelector("[data-gold-next]"),
   toast: document.querySelector("[data-toast]")
 };
 
@@ -454,8 +470,10 @@ async function refreshBronzeRuns() {
 
 function setDataLayer(layer) {
   const showSilver = layer === "silver";
-  elements.bronzeExplorer.hidden = showSilver;
+  const showGold = layer === "gold";
+  elements.bronzeExplorer.hidden = showSilver || showGold;
   elements.silverExplorer.hidden = !showSilver;
+  elements.goldExplorer.hidden = !showGold;
   document.querySelectorAll("[data-data-layer]").forEach((button) => {
     const active = button.dataset.dataLayer === layer;
     button.classList.toggle("is-active", active);
@@ -743,6 +761,346 @@ async function refreshSilverDatasets() {
   }
 }
 
+function setGoldDetailText(selector, value) {
+  document.querySelector(selector).textContent = value;
+}
+
+function renderGoldSummary(statistics) {
+  const values = [
+    ["Works", statistics.work_count.toLocaleString()],
+    ["Pages", statistics.contributing_page_count.toLocaleString()],
+    ["Chunks", statistics.chunk_count.toLocaleString()],
+    [
+      "Short / empty",
+      `${statistics.short_chunk_count.toLocaleString()} / ` +
+      statistics.empty_chunk_count.toLocaleString()
+    ]
+  ];
+  elements.goldSummary.replaceChildren();
+  values.forEach(([label, value]) => {
+    const wrapper = document.createElement("div");
+    const term = document.createElement("dt");
+    const detail = document.createElement("dd");
+    term.textContent = label;
+    detail.textContent = value;
+    wrapper.append(term, detail);
+    elements.goldSummary.append(wrapper);
+  });
+  setGoldDetailText(
+    "[data-gold-token-distribution]",
+    `${statistics.minimum_tokens} / ${statistics.median_tokens.toFixed(0)} / ` +
+    `${statistics.p95_tokens.toFixed(0)} / ${statistics.maximum_tokens} ` +
+    "(min / median / p95 / max)"
+  );
+  setGoldDetailText(
+    "[data-gold-overlap-ratio]",
+    `${(statistics.overlap_ratio * 100).toFixed(1)}% · ` +
+    `${statistics.actual_overlap_tokens.toLocaleString()} repeated tokens`
+  );
+  const workExclusions = statistics.exclusions.filter((item) => item.kind === "work").length;
+  const pageExclusions = statistics.exclusions.filter((item) => item.kind === "page").length;
+  setGoldDetailText(
+    "[data-gold-exclusions]",
+    `${workExclusions.toLocaleString()} / ${pageExclusions.toLocaleString()}`
+  );
+}
+
+function describeGoldPageRange(chunk) {
+  const sourceLabels = [chunk.page_label_start, chunk.page_label_end];
+  const hasUsefulSourceLabels = sourceLabels.every(
+    (label) => label && label !== "-" && label !== "—"
+  );
+  if (hasUsefulSourceLabels) {
+    return `pages ${sourceLabels[0]}–${sourceLabels[1]}`;
+  }
+  return `canvases ${chunk.page_sequence_start}–${chunk.page_sequence_end}`;
+}
+
+function renderGoldWorkOptions() {
+  const previousValue = elements.goldWorkSelect.value;
+  elements.goldWorkSelect.replaceChildren();
+  const allWorks = document.createElement("option");
+  allWorks.value = "";
+  allWorks.textContent = "All works";
+  elements.goldWorkSelect.append(allWorks);
+  state.goldWorks.forEach((work) => {
+    const option = document.createElement("option");
+    option.value = work.work_id;
+    option.textContent = `${work.title} · ${work.chunk_count} chunks`;
+    elements.goldWorkSelect.append(option);
+  });
+  if (state.goldWorks.some((work) => work.work_id === previousValue)) {
+    elements.goldWorkSelect.value = previousValue;
+  }
+}
+
+function renderGoldChunkList() {
+  elements.goldChunkList.replaceChildren();
+  elements.goldChunkCount.textContent = (
+    state.goldChunks.length === state.goldChunkTotal
+      ? `${state.goldChunks.length} ${state.goldChunks.length === 1 ? "chunk" : "chunks"}`
+      : `Showing ${state.goldChunks.length} of ${state.goldChunkTotal} chunks`
+  );
+  elements.goldChunkEmpty.hidden = state.goldChunks.length !== 0;
+  state.goldChunks.forEach((chunk) => {
+    const button = document.createElement("button");
+    const wrapper = document.createElement("span");
+    const title = document.createElement("strong");
+    const subtitle = document.createElement("small");
+    const metadata = document.createElement("span");
+    const arrow = document.createElement("span");
+    button.type = "button";
+    button.className = (
+      `record-item${chunk.chunk_id === state.activeGoldChunk?.chunk_id ? " is-active" : ""}`
+    );
+    button.dataset.goldChunkSelect = chunk.chunk_id;
+    title.textContent = `Chunk ${chunk.chunk_index + 1} · ${chunk.token_count} tokens`;
+    subtitle.textContent = describeGoldPageRange(chunk);
+    metadata.className = "record-meta";
+    metadata.textContent = (
+      `${chunk.title} · ${chunk.overlap_previous_token_count} overlap tokens`
+    );
+    arrow.className = "record-arrow";
+    arrow.textContent = "›";
+    wrapper.append(title, subtitle, metadata);
+    button.append(wrapper, arrow);
+    elements.goldChunkList.append(button);
+  });
+}
+
+function appendGoldTextRange(container, chunk, start, end) {
+  if (end <= start) return;
+  const overlapEnd = chunk.overlap_prefix_char_end;
+  if (start < overlapEnd) {
+    const markEnd = Math.min(end, overlapEnd);
+    const mark = document.createElement("mark");
+    mark.className = "gold-overlap";
+    mark.textContent = chunk.text.slice(start, markEnd);
+    container.append(mark);
+    start = markEnd;
+  }
+  if (end > start) {
+    container.append(document.createTextNode(chunk.text.slice(start, end)));
+  }
+}
+
+function renderGoldChunkText(chunk) {
+  const container = document.querySelector("[data-gold-text]");
+  container.replaceChildren();
+  let cursor = 0;
+  chunk.page_spans.forEach((span) => {
+    appendGoldTextRange(container, chunk, cursor, span.chunk_char_start);
+    const boundary = document.createElement("span");
+    boundary.className = "gold-page-boundary";
+    boundary.textContent = (
+      `\n[Canvas ${span.sequence_number} · source label ${span.page_label}]\n`
+    );
+    container.append(boundary);
+    appendGoldTextRange(
+      container,
+      chunk,
+      span.chunk_char_start,
+      span.chunk_char_end
+    );
+    cursor = span.chunk_char_end;
+  });
+  appendGoldTextRange(container, chunk, cursor, chunk.text.length);
+}
+
+function renderGoldPages(chunk) {
+  const container = document.querySelector("[data-gold-pages]");
+  container.replaceChildren();
+  chunk.page_spans.forEach((span) => {
+    const card = document.createElement("article");
+    const heading = document.createElement("strong");
+    const details = document.createElement("p");
+    heading.textContent = `Canvas ${span.sequence_number} · ${span.page_label}`;
+    details.textContent = (
+      `Chunk characters ${span.chunk_char_start}–${span.chunk_char_end} · ` +
+      `Silver source characters ${span.source_char_start}–${span.source_char_end}`
+    );
+    card.append(heading, details);
+    if (span.image_url) {
+      const image = document.createElement("img");
+      image.src = span.image_url;
+      image.alt = `Digitized source image for canvas ${span.sequence_number}`;
+      image.loading = "lazy";
+      card.prepend(image);
+    }
+    container.append(card);
+  });
+}
+
+async function renderGoldChunkDetail(chunkOrId) {
+  const dataset = state.activeGoldDataset;
+  if (!dataset || !chunkOrId) return;
+  const chunkId = typeof chunkOrId === "string" ? chunkOrId : chunkOrId.chunk_id;
+  try {
+    const url = (
+      `${GOLD_DATASETS_ENDPOINT}/${encodeURIComponent(dataset.gold_dataset_id)}` +
+      `/chunks/${encodeURIComponent(chunkId)}`
+    );
+    const response = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error(`Gold chunk returned ${response.status}`);
+    const chunk = await response.json();
+    state.activeGoldChunk = chunk;
+    renderGoldChunkList();
+    setGoldDetailText(
+      "[data-gold-detail-title]",
+      `Chunk ${chunk.chunk_index + 1} · ${describeGoldPageRange(chunk)}`
+    );
+    setGoldDetailText(
+      "[data-gold-detail-subtitle]",
+      `One retrieval unit from ${chunk.title}`
+    );
+    setGoldDetailText("[data-gold-profile]", chunk.profile_id);
+    setGoldDetailText("[data-gold-chunk-id]", chunk.chunk_id);
+    setGoldDetailText("[data-gold-work-id]", chunk.work_id);
+    setGoldDetailText("[data-gold-chunk-index]", chunk.chunk_index.toLocaleString());
+    setGoldDetailText(
+      "[data-gold-token-count]",
+      `${chunk.token_count.toLocaleString()} / ${chunk.maximum_token_count.toLocaleString()}`
+    );
+    setGoldDetailText(
+      "[data-gold-page-range]",
+      `${chunk.page_sequence_start}–${chunk.page_sequence_end}`
+    );
+    setGoldDetailText(
+      "[data-gold-overlap-count]",
+      `${chunk.overlap_previous_token_count.toLocaleString()} tokens`
+    );
+    setGoldDetailText("[data-gold-work-title]", chunk.title);
+    setGoldDetailText(
+      "[data-gold-contributors]",
+      chunk.contributors.join(" · ") || "Not recorded"
+    );
+    setGoldDetailText(
+      "[data-gold-production]",
+      [...chunk.production_dates, ...chunk.production_labels].join(" · ") || "Not recorded"
+    );
+    setGoldDetailText("[data-gold-language]", chunk.language_id);
+    setGoldDetailText("[data-gold-subjects]", chunk.subjects.join(" · ") || "Not recorded");
+    setGoldDetailText("[data-gold-genres]", chunk.genres.join(" · ") || "Not recorded");
+    const source = document.querySelector("[data-gold-source]");
+    source.href = chunk.source_url;
+    source.textContent = `${chunk.licence_id} · open digitized work`;
+    setGoldDetailText("[data-gold-payload]", JSON.stringify(chunk, null, 2));
+    renderGoldChunkText(chunk);
+    renderGoldPages(chunk);
+    elements.goldPrevious.disabled = !chunk.previous_chunk_id;
+    elements.goldPrevious.dataset.chunkId = chunk.previous_chunk_id || "";
+    elements.goldNext.disabled = !chunk.next_chunk_id;
+    elements.goldNext.dataset.chunkId = chunk.next_chunk_id || "";
+  } catch (error) {
+    setGoldDetailText(
+      "[data-gold-text]",
+      `Could not load this Gold chunk: ${error.message}`
+    );
+  }
+}
+
+async function refreshGoldChunks() {
+  const dataset = state.activeGoldDataset;
+  if (!dataset) return;
+  const query = new URLSearchParams({ limit: "500" });
+  if (elements.goldWorkSelect.value) {
+    query.set("work_id", elements.goldWorkSelect.value);
+  }
+  try {
+    const url = (
+      `${GOLD_DATASETS_ENDPOINT}/${encodeURIComponent(dataset.gold_dataset_id)}` +
+      `/chunks?${query}`
+    );
+    const response = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error(`Gold chunks returned ${response.status}`);
+    const result = await response.json();
+    state.goldChunks = result.items;
+    state.goldChunkTotal = result.total;
+    state.activeGoldChunk = null;
+    renderGoldChunkList();
+    if (state.goldChunks[0]) {
+      await renderGoldChunkDetail(state.goldChunks[0]);
+    } else {
+      setGoldDetailText("[data-gold-detail-title]", "No chunk matches this work");
+      setGoldDetailText("[data-gold-detail-subtitle]", "Choose another Gold work.");
+    }
+  } catch (error) {
+    state.goldChunks = [];
+    state.goldChunkTotal = 0;
+    renderGoldChunkList();
+    setGoldDetailText("[data-gold-text]", error.message);
+  }
+}
+
+async function selectGoldDataset(datasetId) {
+  state.activeGoldDataset = state.goldDatasets.find(
+    (dataset) => dataset.gold_dataset_id === datasetId
+  ) || null;
+  state.goldWorks = [];
+  state.goldChunks = [];
+  state.goldChunkTotal = 0;
+  state.activeGoldChunk = null;
+  if (!state.activeGoldDataset) return;
+  const baseUrl = (
+    `${GOLD_DATASETS_ENDPOINT}/${encodeURIComponent(state.activeGoldDataset.gold_dataset_id)}`
+  );
+  try {
+    const [worksResponse, statisticsResponse] = await Promise.all([
+      fetch(`${baseUrl}/works`, { headers: { Accept: "application/json" } }),
+      fetch(`${baseUrl}/statistics`, { headers: { Accept: "application/json" } })
+    ]);
+    if (!worksResponse.ok || !statisticsResponse.ok) {
+      throw new Error("Gold dataset details are unavailable");
+    }
+    state.goldWorks = await worksResponse.json();
+    renderGoldWorkOptions();
+    renderGoldSummary(await statisticsResponse.json());
+    await refreshGoldChunks();
+  } catch (error) {
+    setGoldDetailText("[data-gold-text]", error.message);
+  }
+}
+
+async function refreshGoldDatasets() {
+  elements.goldDatasetSelect.disabled = true;
+  try {
+    const response = await fetch(GOLD_DATASETS_ENDPOINT, {
+      headers: { Accept: "application/json" }
+    });
+    if (!response.ok) throw new Error(`Gold datasets returned ${response.status}`);
+    state.goldDatasets = await response.json();
+    elements.goldDatasetSelect.replaceChildren();
+    if (state.goldDatasets.length === 0) {
+      const option = document.createElement("option");
+      option.textContent = "No Gold datasets available";
+      elements.goldDatasetSelect.append(option);
+      setGoldDetailText(
+        "[data-gold-text]",
+        "Run the Gold build command against a validated Silver dataset."
+      );
+      return;
+    }
+    state.goldDatasets.forEach((dataset) => {
+      const option = document.createElement("option");
+      option.value = dataset.gold_dataset_id;
+      option.textContent = (
+        `${dataset.chunking_config.profile_id} · ${dataset.chunk_count} chunks · ` +
+        dataset.gold_dataset_id.slice(0, 12)
+      );
+      elements.goldDatasetSelect.append(option);
+    });
+    await selectGoldDataset(state.goldDatasets[0].gold_dataset_id);
+  } catch (error) {
+    elements.goldDatasetSelect.replaceChildren();
+    const option = document.createElement("option");
+    option.textContent = "Gold API unavailable";
+    elements.goldDatasetSelect.append(option);
+    setGoldDetailText("[data-gold-text]", error.message);
+  } finally {
+    elements.goldDatasetSelect.disabled = false;
+  }
+}
+
 function resetResourceSearch() {
   elements.recordSearch.value = "";
   elements.recordFilter.value = "all";
@@ -805,6 +1163,27 @@ elements.silverPageList.addEventListener("click", (event) => {
   );
   if (page) renderSilverPageDetail(page);
 });
+elements.goldDatasetSelect.addEventListener("change", () => {
+  selectGoldDataset(elements.goldDatasetSelect.value);
+});
+elements.goldWorkSelect.addEventListener("change", refreshGoldChunks);
+elements.goldChunkList.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-gold-chunk-select]");
+  const chunk = state.goldChunks.find(
+    (candidate) => candidate.chunk_id === button?.dataset.goldChunkSelect
+  );
+  if (chunk) renderGoldChunkDetail(chunk);
+});
+elements.goldPrevious.addEventListener("click", () => {
+  if (elements.goldPrevious.dataset.chunkId) {
+    renderGoldChunkDetail(elements.goldPrevious.dataset.chunkId);
+  }
+});
+elements.goldNext.addEventListener("click", () => {
+  if (elements.goldNext.dataset.chunkId) {
+    renderGoldChunkDetail(elements.goldNext.dataset.chunkId);
+  }
+});
 elements.recordList.addEventListener("click", (event) => {
   const button = event.target.closest("[data-resource-id]");
   const resource = state.activeBronzeRun?.resources.find(
@@ -832,4 +1211,5 @@ refreshHealth();
 refreshIngestionStatus();
 refreshBronzeRuns();
 refreshSilverDatasets();
+refreshGoldDatasets();
 window.setInterval(refreshIngestionStatus, INGESTION_POLL_INTERVAL_MS);

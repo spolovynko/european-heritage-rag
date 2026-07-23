@@ -26,6 +26,7 @@ _SETTINGS_ENVIRONMENT_VARIABLES = (
     "INGESTION_STATE_DIRECTORY",
     "BRONZE_DATA_DIRECTORY",
     "SILVER_DATA_DIRECTORY",
+    "GOLD_DATA_DIRECTORY",
 )
 
 
@@ -58,6 +59,7 @@ def test_settings_use_safe_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     assert settings.ingestion_state_directory == Path("var/ingestion")
     assert settings.bronze_data_directory == Path("data/bronze")
     assert settings.silver_data_directory == Path("data/silver")
+    assert settings.gold_data_directory == Path("data/gold")
 
 
 def test_environment_variables_override_defaults(
@@ -81,6 +83,7 @@ def test_environment_variables_override_defaults(
     monkeypatch.setenv("INGESTION_STATE_DIRECTORY", "var/test-ingestion")
     monkeypatch.setenv("BRONZE_DATA_DIRECTORY", "data/test-bronze")
     monkeypatch.setenv("SILVER_DATA_DIRECTORY", "data/test-silver")
+    monkeypatch.setenv("GOLD_DATA_DIRECTORY", "data/test-gold")
 
     settings = AppSettings(_env_file=None)
 
@@ -99,6 +102,7 @@ def test_environment_variables_override_defaults(
     assert settings.ingestion_state_directory == Path("var/test-ingestion")
     assert settings.bronze_data_directory == Path("data/test-bronze")
     assert settings.silver_data_directory == Path("data/test-silver")
+    assert settings.gold_data_directory == Path("data/test-gold")
 
 
 def test_invalid_environment_is_rejected(

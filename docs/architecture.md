@@ -4,9 +4,9 @@
 
 This began as the Phase 1 architecture contract for HeritageRAG. It describes
 the boundaries later phases must preserve. The repository is now implemented
-through the Bronze and Silver data layers; Gold chunking, indexing, retrieval,
-generation, and citation validation remain future work. The exact current
-state is recorded in [Project status](project-status.md).
+through the Bronze, Silver, and Gold data layers. Embedding/index construction,
+retrieval, generation, and citation validation remain future work. The exact
+current state is recorded in [Project status](project-status.md).
 
 ## Baseline request flow
 
@@ -66,11 +66,14 @@ Every chunk admitted to answer context must carry at least:
 | `chunk_id` | Stable identity used by generation and citation validation |
 | `work_id` | Links the passage to one Wellcome work |
 | `title` | Human-readable citation label |
-| `page_start` / `page_end` | Inclusive page locator; canvas/image indices retained separately when needed |
+| `page_sequence_start` / `page_sequence_end` | Inclusive IIIF canvas-sequence range |
+| `page_label_start` / `page_label_end` | Exact source labels when available |
+| `page_spans` | Exact contributing page IDs, images, and source/chunk character ranges |
 | `text` | Retrieved OCR passage supplied to generation |
 | `source_url` | Route back to the digitised source |
-| `licence` | Rights provenance and eligibility check |
-| `corpus_version` / `index_version` | Makes results reproducible and debuggable |
+| `licence_id` / `licence_url` | Rights provenance and eligibility check |
+| `silver_dataset_id` / `gold_dataset_id` | Makes canonical evidence reproducible |
+| future `index_version` | Will bind the retrieval structure and embeddings |
 
 The citation validator rejects an unknown chunk ID, a citation not present in
 the current context, or missing work/page provenance. The complete semantic
@@ -78,7 +81,7 @@ rules are defined in [Scope and evidence contract](scope-and-evidence-contract.m
 
 ## Progressive data and application flow
 
-The project implements this target progressively. Bronze and Silver are
+The project implements this target progressively. Bronze, Silver, and Gold are
 complete; downstream boxes remain planned:
 
 ```mermaid
@@ -99,10 +102,12 @@ flowchart LR
     API --> UI
 ```
 
-Bronze, Silver, and Gold layers keep raw input, cleaned page data, and retrieval
-chunks inspectable. The important RAG behaviour—source traversal, chunking,
-ranking, context selection, citation validation, and abstention—will remain
-explicit in project code instead of being hidden in an opaque agent chain.
+Bronze, Silver, and Gold keep raw input, cleaned page data, and retrieval chunks
+inspectable. Gold currently has three versioned 300/500/800-token experiments
+using a pinned BGE-M3 fast tokenizer, exact page spans, and explicit overlap.
+The important RAG behaviour—source traversal, chunking, ranking, context
+selection, citation validation, and abstention—remains explicit in project
+code instead of being hidden in an opaque agent chain.
 
 ## Low-fidelity UI sketch
 
@@ -152,8 +157,9 @@ available for learning and diagnosis without being treated as source evidence.
 
 ## Deferred choices
 
-Phase 1 does not select an embedding model, vector database configuration,
-chunk size, reranker, language model, prompt, or abstention score threshold.
-Those choices require real data and measured comparisons. The target technology
-stack in the learning guide is directional, not evidence that these components
-already exist.
+Phase 7 selected a tokenizer and built three chunk-size candidates, but it did
+not select a winning profile. The embedding model/runtime, active Gold profile,
+vector and sparse index configuration, reranker, language model, prompt, and
+abstention score threshold remain deferred. Those choices require real data
+and measured comparisons. The target technology stack in the learning guide is
+directional, not evidence that these components already exist.

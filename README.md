@@ -18,19 +18,20 @@ structured logging, health API, CLI, automated checks, and container baseline.
 Phase 3 added the frontend shell and serves its production build from FastAPI
 for both local and Docker execution. Phase 4 added bounded Wellcome work
 discovery, resilient IIIF manifest and OCR traversal, work-level checkpoints,
-resume, a CLI, and real file-backed dashboard progress. The verified live smoke
-test completed 5 works and traversed 246 canvases, 14 of which had no OCR.
-Phase 5 added immutable Bronze storage, provenance manifests, content hashes,
-atomic writes, offline validation, idempotent resume, CLI/API inspection, and a
-live browser explorer. The Phase 5 acceptance run stored 310 raw resources for
-5 works and validated all of them offline. Phase 6 added strict canonical work
-and page models, conservative OCR cleaning, exact row-level Bronze lineage,
-deterministic compressed Parquet datasets, quality reports, offline Silver
-validation, CLI/API operations, and a page inspector. The largest verified run
-contains 20 works and 1,670 pages: 1,454 usable, 129 needing review, and 87 with
-no OCR. No Gold chunks, searchable index, or answer generation exists yet, so
-the application is still a diagnostic data product rather than an end-user
-research assistant.
+resume, a CLI, and real file-backed dashboard progress. Phase 5 added immutable
+Bronze evidence, content receipts, atomic publication, offline validation, and
+an explorer. Phase 6 added canonical work/page Parquet, conservative OCR
+cleaning, exact Bronze lineage, quality evidence, and a page inspector. The
+largest Silver snapshot has 20 works and 1,670 pages.
+
+Phase 7 now adds deterministic retrieval-ready Gold Parquet, an immutable
+BGE-M3 tokenizer revision, page-aware hard-bounded chunking, exact page spans,
+visible overlap, explicit language/empty-page exclusions, validation against
+the parent Silver dataset, CLI/API operations, and a Gold browser explorer.
+Three full-corpus experiments contain 1,952, 1,174, and 749 chunks at
+300/500/800-token targets. No searchable index or answer generation exists
+yet, so the application remains a diagnostic data product rather than an
+end-user research assistant.
 
 ## Run the application
 
@@ -63,6 +64,7 @@ Open <http://localhost:8000/>. The operational endpoints are available at:
 - <http://localhost:8000/ingestion/status>
 - <http://localhost:8000/bronze/runs>
 - <http://localhost:8000/silver/datasets>
+- <http://localhost:8000/gold/datasets>
 - <http://localhost:8000/docs>
 
 Stop the local server with `Ctrl+C`.
@@ -139,9 +141,10 @@ With Compose running, use the same command inside the API container:
 docker compose exec api european-heritage-rag ingest wellcome --limit 5 --query cholera --dry-run
 ```
 
-Compose mounts named volumes at `/app/var/ingestion`, `/app/data/bronze`, and
-`/app/data/silver`, preserving control state, raw evidence, and derived
-canonical datasets when the API container is replaced. Run a non-dry ingestion
+Compose mounts named volumes at `/app/var/ingestion`, `/app/data/bronze`,
+`/app/data/silver`, `/app/data/gold`, and `/app/var/huggingface`. They preserve
+control state, raw evidence, canonical pages, retrieval chunks, and downloaded
+tokenizer assets when the API container is replaced. Run a non-dry ingestion
 inside the container to populate its Bronze volume:
 
 ```shell
@@ -192,6 +195,65 @@ versions, so changed evidence or changed rules produce another identity.
 Open the **Data** workspace and choose **Silver · canonical records** to inspect
 aggregate quality, work metadata, page images, raw versus clean OCR, quality
 flags, and exact Bronze lineage.
+
+## Build the Gold retrieval corpus
+
+Gold is an offline transformation of one validated Silver dataset. The first
+run may download the exact pinned `BAAI/bge-m3` fast-tokenizer files; it does
+not load the embedding model or generate vectors.
+
+Build the default 500-token profile:
+
+```shell
+uv run european-heritage-rag gold build \
+  --silver-dataset-id <silver-dataset-id>
+```
+
+Build all three controlled experiments:
+
+```shell
+uv run european-heritage-rag gold build \
+  --silver-dataset-id <silver-dataset-id> \
+  --all-profiles
+```
+
+The named profiles are:
+
+| Profile | Target | Hard maximum | Requested overlap |
+|---|---:|---:|---:|
+| `tokens-300-v1` | 300 | 360 | 30 |
+| `tokens-500-v1` | 500 | 600 | 50 |
+| `tokens-800-v1` | 800 | 960 | 80 |
+
+Gold validates Silver first, includes only unambiguously English licensed
+works, treats empty OCR pages as explicit hard boundaries, preserves every
+eligible non-empty page, and publishes:
+
+```text
+data/gold/wellcome/dataset_id=<sha256>/
+├── chunks.parquet
+├── statistics.json
+├── statistics.md
+└── gold-manifest.json
+```
+
+Inspect or validate the complete snapshots:
+
+```shell
+uv run european-heritage-rag gold inspect
+uv run european-heritage-rag gold validate
+uv run european-heritage-rag gold inspect --dataset-id <gold-dataset-id>
+uv run european-heritage-rag gold validate --dataset-id <gold-dataset-id>
+```
+
+Each chunk contains model-token-bounded text, stable identity, denormalized
+work metadata, rights/source URLs, inherited Silver quality flags, work-local
+adjacency, and exact nested page/image/character spans. Validation recounts
+tokens with the pinned tokenizer and reconciles every page against Silver.
+
+Open **Data** and choose **Gold · retrieval chunks** to compare profiles,
+filter by work, navigate adjacent chunks, inspect highlighted overlap, and
+trace text to source page images.
 
 ### Generated frontend directories
 
@@ -287,15 +349,15 @@ autonomous research, or exhaustive coverage of the Wellcome catalogue. It is
 not a substitute for reading the original source or consulting a historian.
 Source traversal is sequential and English-only and resumes at work rather than
 canvas granularity. Bronze is local-filesystem, single-writer, uncompressed raw
-JSON; the complete run manifest is rewritten atomically after each event.
-Catalogue works preserve all decoded source fields but not the original
-catalogue page's byte formatting. Silver cleaning is intentionally conservative
-and its `usable`/`needs_review` bands are heuristics rather than measured OCR
-accuracy. Repeated header/footer detection is high precision and found no
-confirmed boundaries in the 20-work acceptance sample. The local Silver API
-loads complete Parquet files, and the browser shows at most 500 page summaries
-per filter. Printed page parsing is decimal-only. Gold chunks, retrieval, and
-working answers remain unimplemented.
+JSON. Silver cleaning is intentionally conservative and its quality bands are
+heuristics rather than measured OCR accuracy. Printed page parsing is
+decimal-only. Gold sentence boundaries are punctuation-based; one
+work-level `eng,ger` record is excluded because page-level language is unknown;
+empty OCR pages have no searchable text; and chunking plus overlap adds about
+11% model-token volume. Local Silver/Gold APIs scan complete Parquet files and
+browser lists are capped at 500 summaries. Browser acceptance is manual. No profile has
+retrieval-quality evidence yet, and embeddings, index, retrieval, generation,
+citations, evaluation results, and working answers remain unimplemented.
 
 ## Documentation
 
@@ -310,9 +372,11 @@ working answers remain unimplemented.
 - [ADR-0004: Wellcome API and IIIF ingestion strategy](docs/adr/0004-wellcome-api-and-iiif-ingestion-strategy.md)
 - [ADR-0005: Append-only Bronze storage and idempotent ingestion](docs/adr/0005-append-only-bronze-storage-and-idempotent-ingestion.md)
 - [ADR-0006: Canonical work/page schemas and conservative OCR cleaning](docs/adr/0006-canonical-work-page-schemas-and-conservative-ocr-cleaning.md)
+- [ADR-0007: Versioned page-aware token chunking and Gold datasets](docs/adr/0007-versioned-page-aware-token-chunking-and-gold-datasets.md)
 - [Building guides](docs/building_guides/README.md)
 - [Phase 3 implementation guide](docs/building_guides/phase-03-ui-foundation-and-progress-dashboard.md)
 - [Phase 4 implementation guide](docs/building_guides/phase-04-wellcome-discovery-and-ingestion-client.md)
 - [Phase 5 implementation guide](docs/building_guides/phase-05-bronze-data-layer.md)
 - [Phase 6 implementation guide](docs/building_guides/phase-06-silver-normalization-and-ocr-cleaning.md)
+- [Phase 7 implementation guide](docs/building_guides/phase-07-gold-data-layer-and-chunking-experiments.md)
 - [Development and learning agreement](docs/learning-guide-agreement.md)

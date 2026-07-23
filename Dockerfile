@@ -32,7 +32,8 @@ RUN uv sync --locked --no-dev --no-editable
 ENV PATH="/app/.venv/bin:$PATH"
 
 RUN useradd --create-home --uid 10001 appuser \
-    && mkdir -p /app/var/ingestion /app/data/bronze /app/data/silver \
+    && mkdir -p /app/var/ingestion /app/var/huggingface \
+        /app/data/bronze /app/data/silver /app/data/gold \
     && chown -R appuser:appuser /app/var /app/data
 USER appuser
 

@@ -30,6 +30,7 @@ def test_help_lists_available_commands() -> None:
     assert "ingest" in result.output
     assert "bronze" in result.output
     assert "silver" in result.output
+    assert "gold" in result.output
     assert "version" in result.output
 
 
@@ -199,3 +200,60 @@ def test_silver_build_rejects_unknown_bronze_run(tmp_path: Path) -> None:
 
     assert result.exit_code == 1
     assert "Bronze run not found: missing" in result.output
+
+
+def test_gold_inspect_reports_empty_store(tmp_path: Path) -> None:
+    """Inspection should not invent chunk datasets."""
+
+    settings = AppSettings(
+        _env_file=None,
+        gold_data_directory=tmp_path / "gold",
+    )
+    with patch(
+        "european_heritage_rag.cli.get_settings",
+        return_value=settings,
+    ):
+        result = runner.invoke(app, ["gold", "inspect"])
+
+    assert result.exit_code == 0
+    assert "No Gold datasets found." in result.output
+
+
+def test_gold_build_rejects_unknown_silver_dataset(tmp_path: Path) -> None:
+    """An explicit Silver input must exist before Gold chunking."""
+
+    settings = AppSettings(
+        _env_file=None,
+        silver_data_directory=tmp_path / "silver",
+        gold_data_directory=tmp_path / "gold",
+    )
+    with patch(
+        "european_heritage_rag.cli.get_settings",
+        return_value=settings,
+    ):
+        result = runner.invoke(
+            app,
+            ["gold", "build", "--silver-dataset-id", "missing"],
+        )
+
+    assert result.exit_code == 1
+    assert "Silver dataset not found: missing" in result.output
+
+
+def test_gold_build_rejects_unknown_profile() -> None:
+    """Only the three versioned Phase 7 profiles should be accepted."""
+
+    result = runner.invoke(
+        app,
+        [
+            "gold",
+            "build",
+            "--silver-dataset-id",
+            "dataset",
+            "--profile",
+            "unknown",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "unknown profile" in result.output

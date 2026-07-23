@@ -18,6 +18,7 @@ Each documentation area has one job:
 - [Phase 4: Wellcome discovery and ingestion client](phase-04-wellcome-discovery-and-ingestion-client.md)
 - [Phase 5: Bronze data layer](phase-05-bronze-data-layer.md)
 - [Phase 6: Silver normalization and OCR cleaning](phase-06-silver-normalization-and-ocr-cleaning.md)
+- [Phase 7: Gold data layer and chunking experiments](phase-07-gold-data-layer-and-chunking-experiments.md)
 
 ## Update convention
 

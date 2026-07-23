@@ -20,6 +20,10 @@ export default defineConfig({
       "/silver": {
         target: "http://127.0.0.1:8000",
         changeOrigin: true
+      },
+      "/gold": {
+        target: "http://127.0.0.1:8000",
+        changeOrigin: true
       }
     }
   }

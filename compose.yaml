@@ -3,18 +3,22 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: european-heritage-rag:phase6
+    image: european-heritage-rag:phase7
     environment:
       APP_ENV: production
       LOG_LEVEL: INFO
       BRONZE_DATA_DIRECTORY: /app/data/bronze
       SILVER_DATA_DIRECTORY: /app/data/silver
+      GOLD_DATA_DIRECTORY: /app/data/gold
+      HF_HOME: /app/var/huggingface
     ports:
       - "8000:8000"
     volumes:
       - ingestion-state:/app/var/ingestion
       - bronze-data:/app/data/bronze
       - silver-data:/app/data/silver
+      - gold-data:/app/data/gold
+      - huggingface-cache:/app/var/huggingface
     healthcheck:
       test:
         [
@@ -32,3 +36,5 @@ volumes:
   ingestion-state:
   bronze-data:
   silver-data:
+  gold-data:
+  huggingface-cache:

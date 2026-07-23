@@ -77,7 +77,7 @@
           </div>
           <div class="phase-row">
             <span class="status-dot status-dot--amber" aria-hidden="true"></span>
-            <span>Phase 6 Silver data layer</span>
+            <span>Phase 7 Gold data layer</span>
           </div>
         </div>
       </aside>
@@ -252,11 +252,11 @@
           <section class="view" data-view-panel="data" aria-labelledby="data-title" hidden>
             <div class="page-heading heading-with-actions">
               <div>
-                <p class="kicker">Raw and canonical evidence</p>
+                <p class="kicker">Raw, canonical, and retrieval-ready evidence</p>
                 <h1 id="data-title">Data explorer</h1>
-                <p>Move between immutable Bronze receipts and canonical Silver works and pages.</p>
+                <p>Trace evidence from immutable Bronze receipts through Silver pages to Gold chunks.</p>
               </div>
-              <span class="state-badge state-badge--ready">Live Bronze &amp; Silver data</span>
+              <span class="state-badge state-badge--ready">Live Bronze, Silver &amp; Gold data</span>
             </div>
 
             <div class="data-layer-tabs" role="tablist" aria-label="Data layer">
@@ -265,6 +265,9 @@
               </button>
               <button class="data-layer-tab" type="button" role="tab" aria-selected="false" data-data-layer="silver">
                 Silver · canonical records
+              </button>
+              <button class="data-layer-tab" type="button" role="tab" aria-selected="false" data-data-layer="gold">
+                Gold · retrieval chunks
               </button>
             </div>
 
@@ -478,6 +481,114 @@
                   <details class="silver-lineage">
                     <summary>Show exact Bronze lineage</summary>
                     <pre data-silver-lineage>No lineage loaded.</pre>
+                  </details>
+                </article>
+              </div>
+            </div>
+
+            <div data-gold-explorer hidden>
+              <article class="panel bronze-run-panel">
+                <div>
+                  <label for="gold-dataset-select">Gold dataset and profile</label>
+                  <select id="gold-dataset-select" data-gold-dataset-select>
+                    <option>Loading Gold datasets…</option>
+                  </select>
+                </div>
+                <dl class="bronze-run-summary" data-gold-summary>
+                  <div><dt>Works</dt><dd>0</dd></div>
+                  <div><dt>Pages</dt><dd>0</dd></div>
+                  <div><dt>Chunks</dt><dd>0</dd></div>
+                  <div><dt>Short / empty</dt><dd>0 / 0</dd></div>
+                </dl>
+              </article>
+
+              <div class="silver-quality-strip">
+                <div><span>Token distribution</span><strong data-gold-token-distribution>—</strong></div>
+                <div><span>Overlap ratio</span><strong data-gold-overlap-ratio>—</strong></div>
+                <div><span>Excluded work / pages</span><strong data-gold-exclusions>—</strong></div>
+              </div>
+
+              <div class="explorer-layout">
+                <aside class="panel record-browser" aria-label="Gold chunks">
+                  <div class="explorer-controls silver-controls">
+                    <label>
+                      <span class="sr-only">Filter Gold chunks by work</span>
+                      <select aria-label="Filter Gold chunks by work" data-gold-work-select>
+                        <option value="">All works</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div class="record-count">
+                    <span data-gold-chunk-count>0 chunks</span>
+                    <span>Retrieval unit index</span>
+                  </div>
+                  <div class="record-list" data-gold-chunk-list></div>
+                  <div class="record-empty" data-gold-chunk-empty hidden>
+                    <strong>No matching Gold chunks</strong>
+                    <p>Choose another work or build a Gold dataset first.</p>
+                  </div>
+                </aside>
+
+                <article class="panel record-detail gold-detail">
+                  <div class="detail-heading">
+                    <div>
+                      <p class="kicker">Retrieval-ready evidence</p>
+                      <h2 data-gold-detail-title>Select a Gold dataset</h2>
+                      <p data-gold-detail-subtitle>Chunk text retains exact page ownership.</p>
+                    </div>
+                    <span class="state-badge state-badge--sample" data-gold-profile>Not loaded</span>
+                  </div>
+
+                  <div class="gold-adjacency">
+                    <button class="text-button" type="button" data-gold-previous disabled>← Previous chunk</button>
+                    <button class="text-button" type="button" data-gold-next disabled>Next chunk →</button>
+                  </div>
+
+                  <dl class="metadata-grid">
+                    <div><dt>Chunk ID</dt><dd class="hash-value" data-gold-chunk-id>—</dd></div>
+                    <div><dt>Work ID</dt><dd data-gold-work-id>—</dd></div>
+                    <div><dt>Chunk index</dt><dd data-gold-chunk-index>—</dd></div>
+                    <div><dt>Model tokens</dt><dd data-gold-token-count>—</dd></div>
+                    <div><dt>Canvas range</dt><dd data-gold-page-range>—</dd></div>
+                    <div><dt>Repeated prefix</dt><dd data-gold-overlap-count>—</dd></div>
+                  </dl>
+
+                  <section class="silver-work-metadata">
+                    <div>
+                      <p class="kicker">Denormalized retrieval metadata</p>
+                      <h3 data-gold-work-title>No work selected</h3>
+                    </div>
+                    <dl class="metadata-grid">
+                      <div><dt>Contributors</dt><dd data-gold-contributors>—</dd></div>
+                      <div><dt>Production</dt><dd data-gold-production>—</dd></div>
+                      <div><dt>Language</dt><dd data-gold-language>—</dd></div>
+                      <div><dt>Subjects</dt><dd data-gold-subjects>—</dd></div>
+                      <div><dt>Genres</dt><dd data-gold-genres>—</dd></div>
+                      <div><dt>Licence / source</dt><dd><a data-gold-source href="#" target="_blank" rel="noreferrer">—</a></dd></div>
+                    </dl>
+                  </section>
+
+                  <section class="ocr-panel gold-text-panel">
+                    <div class="ocr-toolbar">
+                      <div>
+                        <p class="kicker">Chunk text</p>
+                        <h3>Highlighted overlap from previous chunk</h3>
+                      </div>
+                    </div>
+                    <pre class="gold-chunk-text" data-gold-text>Choose a chunk to inspect its retrieval text.</pre>
+                  </section>
+
+                  <section class="gold-pages-section">
+                    <div>
+                      <p class="kicker">Citation-safe page provenance</p>
+                      <h3>Contributing pages and source images</h3>
+                    </div>
+                    <div class="gold-page-grid" data-gold-pages></div>
+                  </section>
+
+                  <details class="silver-lineage">
+                    <summary>Show Gold configuration and payload</summary>
+                    <pre data-gold-payload>No chunk loaded.</pre>
                   </details>
                 </article>
               </div>
